@@ -68,9 +68,20 @@ def test_selection_has_exact_sizes_and_keeps_every_pair_of_splits_apart() -> Non
     assert set(dropped) == {"val_near_test", "train_near_test", "train_near_val"}
 
 
+def _test_ids(df: pd.DataFrame) -> set[int]:
+    """Return the row labels that belong to the test split.
+
+    Args:
+        df: Rows with a ``split`` column.
+
+    Returns:
+        The labels of the test rows.
+    """
+    return {int(i) for i in df.index[df["split"] == "test"]}
+
+
 def test_test_set_is_independent_of_the_later_splits() -> None:
     df = _world(6000)
     small = select_release(df, {"test": 300, "val": 50, "train": 500}, seed=0)[0]
     large = select_release(df, {"test": 300, "val": 200, "train": 2000}, seed=0)[0]
-    ids = lambda d: set(d.index[d["split"] == "test"])  # ruff: ignore[lambda-assignment]
-    assert ids(small) == ids(large)
+    assert _test_ids(small) == _test_ids(large)

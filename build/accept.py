@@ -29,9 +29,11 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 import yaml
+from datasets import load_dataset
 from PIL import Image
 from scipy.spatial import cKDTree
 
+from sen_bridge.fid_core import frechet_distance, load_stats
 from sen_bridge_build import constants, filters
 from sen_bridge_build.sample import Record, reject_reason
 
@@ -357,8 +359,6 @@ def check_load_dataset(release: Path, df: pd.DataFrame) -> Result:
     Returns:
         Passes if counts, feature types and a decoded example are right.
     """
-    from datasets import load_dataset  # ruff: ignore[import-outside-top-level]
-
     ds = load_dataset(str(release))
     expected = {"train": "train", "validation": "val", "test": "test"}
     counts_ok = all(
@@ -452,8 +452,6 @@ def check_stats(release: Path, max_floor: float) -> Result:
     Returns:
         Passes if shapes are right and the validation-versus-test FID is small.
     """
-    from sen_bridge.fid_core import frechet_distance, load_stats  # ruff: ignore[import-outside-top-level]
-
     val = load_stats(release / "stats" / "fid_validation.npz")
     test = load_stats(release / "stats" / "fid_test.npz")
     shapes_ok = all(
