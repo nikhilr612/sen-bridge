@@ -1,4 +1,4 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """Steps 4-5: splits, caps, downsampling and the Hugging Face dataset layout.
 
@@ -296,6 +296,10 @@ def copy_references(out: Path) -> None:
         shutil.copytree(src, out / dst, dirs_exist_ok=True, ignore=ignore)
     for name in _REFERENCE_FILES:
         shutil.copy(name, out / "scripts" / name)
+    # The dataset is CC BY 4.0, so the release root carries that licence; the code
+    # in scripts/ keeps its own Apache-2.0 LICENSE (copied above).
+    shutil.copy("licenses/LICENSE-CC-BY-4.0.txt", out / "LICENSE")
+    shutil.copy("NOTICE", out / "NOTICE")
     for script in ("evaluate.py", "make_fid_stats.py"):
         shutil.copy(Path("scripts") / script, out / "scripts" / script)
 

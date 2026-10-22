@@ -1,10 +1,14 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """The FID resize: clean-fid's "clean" mode (PIL bicubic, float32, 299x299).
 
 Based on clean-fid (MIT, Copyright (c) 2021 Gaurav Parmar), ``cleanfid/resize.py``.
 Values stay float in [0, 255] (no re-quantisation after resizing), matching
 clean-fid's default.
+
+Changes from clean-fid: only the "clean" mode (PIL bicubic on float32 channels) is
+kept, as a typed pure function; the multi-core folder resizer and the other
+resizing libraries are removed.
 """
 
 from __future__ import annotations

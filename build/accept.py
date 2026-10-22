@@ -1,4 +1,4 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """Acceptance tests of a finished release directory.
 
@@ -48,6 +48,7 @@ _SIZE_CAP_GB = 16
 _BYTES_PER_GB = 1024**3
 _META_LEN = 7
 _EPS = 1e-3
+_HOLDER = "Nikhil Raghavendra"
 #: Largest allowed gap, in percentage points, between a split's regional share and
 #: the release's.
 _MIX_TOL = 1.0
@@ -552,12 +553,11 @@ def check_card_and_files(release: Path, df: pd.DataFrame) -> list[Result]:
         "stats/fid_test.npz",
         "stats/fid_validation.npz",
         "scripts/evaluate.py",
+        "scripts/LICENSE",
+        "scripts/NOTICE",
+        "licenses/LICENSE-CC-BY-4.0.txt",
     ]
-    missing = [
-        p
-        for p in required
-        if not (release / p).exists() and not (release / "scripts" / p).exists()
-    ]
+    missing = [p for p in required if not (release / p).exists()]
     size_gb = sum(f.stat().st_size for f in data_files(release)) / _BYTES_PER_GB
     return [
         Result(
@@ -577,6 +577,37 @@ def check_card_and_files(release: Path, df: pd.DataFrame) -> list[Result]:
             f"{size_gb:.2f} GB of data (cap {_SIZE_CAP_GB})",
         ),
     ]
+
+
+def check_licences(release: Path) -> Result:
+    """Check that the right licence text sits where a user will look for it.
+
+    The release root must carry CC BY 4.0 (the dataset's licence) and ``scripts/``
+    the Apache-2.0 text of the code. The card must declare ``cc-by-4.0`` and the
+    NOTICE must name the copyright holder and carry the required Copernicus notice.
+
+    Args:
+        release: Release directory.
+
+    Returns:
+        Passes if every statement holds.
+    """
+
+    def read(name: str) -> str:
+        return (release / name).read_text(encoding="utf-8")
+
+    card = yaml.safe_load(read("README.md").split("---")[1])
+    problems = []
+    if "Attribution 4.0 International" not in read("LICENSE"):
+        problems.append("root LICENSE is not CC BY 4.0")
+    if "Apache License" not in read("scripts/LICENSE"):
+        problems.append("scripts/LICENSE is not Apache-2.0")
+    if card.get("license") != "cc-by-4.0":
+        problems.append("card does not declare cc-by-4.0")
+    notice = read("NOTICE")
+    required = (_HOLDER, "Contains modified Copernicus Sentinel data")
+    problems.extend(f"NOTICE lacks {n!r}" for n in required if n not in notice)
+    return Result("licences", not problems, f"problems: {problems or 'none'}")
 
 
 def check_stats(release: Path, max_floor: float) -> Result:
@@ -647,6 +678,7 @@ def main() -> None:
         partial(check_caps, df),
         partial(check_images_and_filters, release, df),
         partial(check_card_and_files, release, df),
+        partial(check_licences, release),
         partial(check_stats, release, args.max_fid_floor),
     ]
     if not args.skip_load_dataset:

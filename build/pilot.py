@@ -1,4 +1,4 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """Pilot build: stream a few shards, filter, write PNG pairs for auditing.
 

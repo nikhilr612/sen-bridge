@@ -1,4 +1,4 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """Geographic splits, the 5 km leakage check, caps and downsampling."""
 

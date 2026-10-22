@@ -3,7 +3,9 @@ name = "sen-bridge"
 version = "0.1.0"
 description = "SEN-Bridge: FID, LPIPS, PSNR and SSIM for SAR-to-optical benchmarks (PyTorch and JAX), plus the dataset build code"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "licenses/*"]
+authors = [{ name = "Nikhil Raghavendra", email = "nikhil612.r@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = ["numpy", "scipy", "pillow"]
 
@@ -71,7 +73,7 @@ max-doc-length = 84  # docstrings and comments obey the same limit as code
 convention = "google"  # the single docstring standard: Google style, checked by D and DOC rules
 
 [tool.ruff.lint.flake8-copyright]
-notice-rgx = "(?i)Copyright 20\\d{2} The sen-bridge authors"
+notice-rgx = "(?i)Copyright 20\\d{2} Nikhil Raghavendra"
 
 [tool.ruff.lint.per-file-ignores]
 "build/**" = [

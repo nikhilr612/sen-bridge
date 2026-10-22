@@ -1,4 +1,4 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """Full build, step 3: stream shards, filter, write one Parquet part per shard.
 

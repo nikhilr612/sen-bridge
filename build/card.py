@@ -1,4 +1,4 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """Write ``README.md`` (Hugging Face dataset card and datasheet) into the release.
 
@@ -130,11 +130,56 @@ scenes. The estimated effect of all filters on the clearly-bad rate is about 2.0
 - LPIPS uses the VGG16 trunk, whose weights have no published licence; see
   `docs/LICENSES.md` before commercial use.
 
+## License and attribution
+
+- **Data:** CC BY 4.0 (`LICENSE`; https://creativecommons.org/licenses/by/4.0/), the
+  licence of its source. Credit SSL4EO-S12 v1.1 and give the notice below.
+- **Code** in `scripts/` (build code, metrics, evaluation): Apache-2.0
+  (`scripts/LICENSE`); third-party licences are in `licenses/` and `NOTICE`.
+- **Required notice:** Contains modified Copernicus Sentinel data 2019-2021.
+- **Changes made to the source data:** centre-crop to 256x256 and 2x2 averaging to
+  128x128 at 20 m (radar in linear power); 8-bit normalisation of radar and optical;
+  rejection of crops by the filters above; selection and splitting; added metadata
+  (`meta`, `orbit` derived from the radar pass's local solar time, quality scores
+  and flags).
+
 ## Release policy
 
 Fixes ship as new tagged revisions with a changelog; v1.0 is never overwritten. Test
 targets are public; select models on validation only. Citation/DOI: {doi} (minted by
 the Hub at publication).
+"""
+
+
+#: Appended after formatting: BibTeX contains braces, which ``str.format`` would
+#: read.
+_CITATION = """
+## Citation
+
+```bibtex
+@misc{raghavendra2026senbridge,
+  title  = {{SEN-Bridge}: A SAR-to-Optical Flow Matching Dataset},
+  author = {Raghavendra, Nikhil},
+  year   = {2026},
+  note   = {Dataset. DOI to be assigned at publication.}
+}
+@article{blumenstiel2025ssl4eos12v11,
+  title   = {{SSL4EO-S12 v1.1}: A Multimodal, Multiseasonal Dataset for
+             Pretraining, Updated},
+  author  = {Blumenstiel, Benedikt and Ait Ali Braham, Nassim and
+             Albrecht, Conrad M and Maurogiovanni, Stefano and Fraccaro, Paolo},
+  journal = {arXiv preprint arXiv:2503.00168},
+  year    = {2025}
+}
+@article{wang2022ssl4eos12,
+  title   = {{SSL4EO-S12}: A Large-Scale Multi-Modal, Multi-Temporal Dataset for
+             Self-Supervised Learning in Earth Observation},
+  author  = {Wang, Yi and Ait Ali Braham, Nassim and Xiong, Zhitong and
+             Liu, Chenying and Albrecht, Conrad M and Zhu, Xiao Xiang},
+  journal = {arXiv preprint arXiv:2211.07044},
+  year    = {2022}
+}
+```
 """
 
 
@@ -197,23 +242,26 @@ def body(stats: dict[str, Any], thresholds: dict[str, Any]) -> str:
     """
     final = stats["final"]
     ranked = sorted(stats["rejects"].items(), key=lambda kv: -kv[1])
-    return _BODY.format(
-        n=sum(final.values()),
-        train=final.get("train", 0),
-        val=final.get("val", 0),
-        test=final.get("test", 0),
-        source_commit=thresholds["source_commit"],
-        code_commit=thresholds["code_commit"],
-        seed=thresholds["seed"],
-        sha256=thresholds["sha256"],
-        fetched=stats["candidates_fetched"],
-        kept=stats["kept_by_filters"],
-        rejects="\n".join(f"| {k} | {v:,} |" for k, v in ranked),
-        constants="\n".join(
-            f"| `{k}` | {v} |" for k, v in thresholds["constants"].items()
-        ),
-        clean=stats["clean_share"],
-        doi=_DOI_PLACEHOLDER,
+    return (
+        _BODY.format(
+            n=sum(final.values()),
+            train=final.get("train", 0),
+            val=final.get("val", 0),
+            test=final.get("test", 0),
+            source_commit=thresholds["source_commit"],
+            code_commit=thresholds["code_commit"],
+            seed=thresholds["seed"],
+            sha256=thresholds["sha256"],
+            fetched=stats["candidates_fetched"],
+            kept=stats["kept_by_filters"],
+            rejects="\n".join(f"| {k} | {v:,} |" for k, v in ranked),
+            constants="\n".join(
+                f"| `{k}` | {v} |" for k, v in thresholds["constants"].items()
+            ),
+            clean=stats["clean_share"],
+            doi=_DOI_PLACEHOLDER,
+        )
+        + _CITATION
     )
 
 

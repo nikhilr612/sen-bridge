@@ -1,4 +1,4 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """PyTorch metrics: FID, LPIPS (VGG), PSNR, SSIM.
 
@@ -20,6 +20,11 @@ v0.1 linear layers; SSIM uses an 11x11 Gaussian, sigma 1.5, data range 1.
 The FID Inception block variants below are vendored from pytorch-fid (Apache-2.0,
 Copyright Maximilian Seitzer), see NOTICE. LPIPS follows
 richzhang/PerceptualSimilarity (BSD-2-Clause).
+
+Changes from the originals: the Inception blocks subclass torchvision's and load
+their weights from safetensors; one network is shared per device; convolutions run
+at full precision (no TF32); LPIPS is ported into one module that loads the trunk
+and the linear layers from a single safetensors file.
 """
 
 from __future__ import annotations

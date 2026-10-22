@@ -1,9 +1,12 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """Framework-free FID maths and the statistics file format.
 
 The Frechet distance follows pytorch-fid (Apache-2.0, Maximilian Seitzer); see
 NOTICE.
+
+Changes from pytorch-fid: the distance is separated from feature extraction, typed
+and documented, and written for current SciPy (no ``disp`` argument).
 """
 
 from __future__ import annotations

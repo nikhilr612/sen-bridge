@@ -7,14 +7,15 @@ not against search summaries. Open items are marked **OPEN**.
 
 | Component | Licence | Verified from | Used for |
 |---|---|---|---|
-| sen-bridge (this repo) | Apache-2.0 (chosen: compatible with the vendored Apache-2.0 code) | `LICENSE` | - |
+| sen-bridge (this repo) | Apache-2.0, Copyright 2026 Nikhil Raghavendra (chosen: compatible with the adapted Apache-2.0 code) | `LICENSE` | - |
 | pytorch-fid | Apache-2.0 | its LICENSE file and README ("licensed under the Apache License 2.0"; original TTUR code also Apache-2.0) | FID Inception graph, Frechet distance |
 | clean-fid | MIT | its LICENSE file | CPU bicubic resize |
 | lpips (PerceptualSimilarity) | BSD-2-Clause | its LICENSE file | LPIPS algorithm |
 | torchvision | BSD-3-Clause | its LICENSE file | dependency only |
 
 Apache-2.0 requires keeping the licence text, the NOTICE and a statement of changes; MIT and BSD-2 require keeping their notices.
-All are in `NOTICE` and `licenses/`. **Confirm the copyright holder** named in `NOTICE` before publishing.
+All are in `NOTICE` and `licenses/`. The copyright holder is Nikhil Raghavendra, as named in
+`NOTICE` and in every source file's header (enforced by the linter).
 
 ## Weights (never redistributed; fetched from the original host and hash-checked)
 
@@ -33,6 +34,15 @@ All are in `NOTICE` and `licenses/`. **Confirm the copyright holder** named in `
 | Copernicus Sentinel data | EU legal notice: free, full and open access, notice required | Adapted data must carry: **"Contains modified Copernicus Sentinel data [Year]"**. Verified in the European Commission legal notice text. The card uses it. |
 | FID statistics files | mean and covariance of Inception features of the dataset images | Derived from CC BY data; contain no weights. Fine to ship. |
 
-## Decisions for you
-1. Confirm Apache-2.0 for sen-bridge and the copyright holder name in `NOTICE`.
-2. VGG16 weights: accept that LPIPS needs weights with no explicit licence, or drop LPIPS-VGG from the benchmark. Dropping is not recommended: LPIPS-VGG is the metric set in the proposal.
+## Decisions
+
+1. **Code licence and holder: decided.** Apache-2.0; the holder is Nikhil Raghavendra, who
+   confirmed they hold the IP. If the work was done under an employer's or institution's IP
+   policy, that policy governs and this should be re-checked before release.
+2. **VGG16 weights for LPIPS: keep, decided.** The maintainer's view is that the weights are
+   unlikely to be an issue in practice. For the record, the upstream position is unchanged:
+   torchvision publishes no separate weights licence and tells users to check the terms of its
+   pre-trained models. Nothing is redistributed, so sen-bridge itself ships no weights, but
+   users who need certainty (for example for commercial use) should verify the terms
+   themselves. This file will be updated if upstream states a licence for these weights.
+3. **Dataset licence:** CC BY 4.0, inherited from SSL4EO-S12 v1.1; not a free choice.

@@ -1,4 +1,4 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """PyTorch and JAX give the same numbers: FID within 0.01 and LPIPS within 1e-4."""
 

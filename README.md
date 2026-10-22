@@ -68,9 +68,14 @@ per-image PSNR/SSIM/LPIPS with 95% bootstrap intervals resampled by geographic c
 
 ## Licences
 
-Code: Apache-2.0 (see `LICENSE`, `NOTICE`, `licenses/`). Weights are **not** redistributed; they come from their original hosts and are
-SHA-256 checked. The FID and LPIPS-linear weights are Apache-2.0 and BSD-2-Clause. The VGG16 trunk has no published weights licence;
-see `docs/LICENSES.md` before commercial use.
+- **Code:** Apache-2.0, Copyright 2026 Nikhil Raghavendra (`LICENSE`, `NOTICE`). Adapted
+  third-party code and its licences are in `NOTICE` and `licenses/`.
+- **Dataset:** CC BY 4.0, the licence of its source, SSL4EO-S12 v1.1. Attribution and the
+  Copernicus notice are in the dataset card and `NOTICE`.
+- **Weights** are **not** redistributed; they come from their original hosts and are
+  SHA-256 checked. The FID and LPIPS-linear weights are Apache-2.0 and BSD-2-Clause.
+  The VGG16 trunk (used by LPIPS) has no published weights licence upstream;
+  `docs/LICENSES.md` records the position.
 
 ## Development standards
 

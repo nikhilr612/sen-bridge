@@ -1,4 +1,4 @@
-# Copyright 2026 The sen-bridge authors.
+# Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
 """JAX metrics: FID, LPIPS (VGG), PSNR, SSIM, matched to ``sen_bridge.torch``.
 
@@ -20,6 +20,10 @@ Same frozen settings and the same safetensors weights as the PyTorch module; the
 Inception graph follows pytorch-fid (Apache-2.0, see NOTICE) and LPIPS follows
 richzhang/PerceptualSimilarity (BSD-2-Clause). Written as plain functions over a
 parameter dict, so only jax is needed.
+
+Changes from the originals: a JAX implementation of the pytorch-fid Inception graph
+(batch norm folded into the convolutions) and of LPIPS, written as plain functions
+over a parameter dict and sharing its weights with the PyTorch module.
 """
 
 from __future__ import annotations

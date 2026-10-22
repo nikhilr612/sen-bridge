@@ -1,28 +1,47 @@
 sen-bridge
-Copyright 2026 The sen-bridge authors. Licensed under the Apache License, Version 2.0 (see LICENSE).
+Copyright 2026 Nikhil Raghavendra
+Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-This package contains or is derived from the following third-party work. Their licence texts are in licenses/.
+This product includes software adapted from third-party projects, uses third-party
+model weights that it does not redistribute, and builds a dataset from third-party
+data. Their licence texts are in licenses/.
 
 CODE
-- pytorch-fid (Apache-2.0), Maximilian Seitzer. The FID Inception-v3 block variants in sen_bridge/torch.py, the
-  graph in sen_bridge/jax.py and the Frechet distance in sen_bridge/fid_core.py are adapted from it.
+- pytorch-fid (Apache-2.0), Maximilian Seitzer. The FID Inception-v3 block variants in
+  sen_bridge/torch.py, the graph in sen_bridge/jax.py and the Frechet distance in
+  sen_bridge/fid_core.py are adapted from it. The project ships no NOTICE file.
   https://github.com/mseitzer/pytorch-fid   (licenses/LICENSE-pytorch-fid.txt)
-- clean-fid (MIT), Copyright (c) 2021 Gaurav Parmar. The 299x299 bicubic resize in sen_bridge/resize.py is adapted from it.
+- clean-fid (MIT), Copyright (c) 2021 Gaurav Parmar. The 299x299 bicubic resize in
+  sen_bridge/resize.py is adapted from it.
   https://github.com/GaParmar/clean-fid   (licenses/LICENSE-clean-fid.txt)
-- PerceptualSimilarity / lpips (BSD-2-Clause), Copyright (c) 2018 Richard Zhang, Phillip Isola, Alexei A. Efros,
-  Eli Shechtman, Oliver Wang. The LPIPS computation is ported from it.
+- PerceptualSimilarity / lpips (BSD-2-Clause), Copyright (c) 2018 Richard Zhang,
+  Phillip Isola, Alexei A. Efros, Eli Shechtman, Oliver Wang. The LPIPS computation
+  is ported from it.
   https://github.com/richzhang/PerceptualSimilarity   (licenses/LICENSE-lpips.txt)
-- torchvision (BSD-3-Clause), Copyright (c) Soumith Chintala 2016. Used as a dependency (Inception block and VGG16
-  definitions); not redistributed.   (licenses/LICENSE-torchvision.txt)
+- torchvision (BSD-3-Clause), Copyright (c) Soumith Chintala 2016. Used as a
+  dependency (Inception block and VGG16 definitions); not redistributed.
+  (licenses/LICENSE-torchvision.txt)
+Each adapted file states its changes from the original in its module docstring.
 
-WEIGHTS (not redistributed; downloaded from their original hosts on first use and checked against pinned SHA-256 digests)
-- FID Inception-v3: the TensorFlow inception-2015-12-05 weights as converted by pytorch-fid.
-  Original archive licence: Apache-2.0, Copyright 2015 The TensorFlow Authors   (licenses/LICENSE-tensorflow-inception.txt)
+WEIGHTS (not redistributed; downloaded from their original hosts on first use and
+checked against pinned SHA-256 digests)
+- FID Inception-v3: the TensorFlow inception-2015-12-05 weights as converted by
+  pytorch-fid. Original archive licence: Apache-2.0, Copyright 2015 The TensorFlow
+  Authors   (licenses/LICENSE-tensorflow-inception.txt)
 - LPIPS v0.1 linear layers (VGG): BSD-2-Clause, distributed in the lpips repository.
-- VGG16 ImageNet trunk (torchvision vgg16-397923af): no separate weights licence is published. torchvision's documentation says
-  its pre-trained models "may have their own licenses or terms and conditions derived from the dataset used for training"
-  and that users must determine whether they may use them. See docs/LICENSES.md.
+- VGG16 ImageNet trunk (torchvision vgg16-397923af): torchvision publishes no
+  separate licence for its weights and says its pre-trained models "may have their
+  own licenses or terms and conditions derived from the dataset used for training".
+  The maintainer has decided to use them; see docs/LICENSES.md.
 
-DATA (not part of this package)
-- SEN-Bridge is derived from SSL4EO-S12 v1.1 (CC BY 4.0) and Copernicus Sentinel data. Releases must carry:
-  "Contains modified Copernicus Sentinel data [years]". See docs/LICENSES.md.
+DATA (the SEN-Bridge dataset, released separately from this code)
+- Licence: CC BY 4.0 (licenses/LICENSE-CC-BY-4.0.txt), the licence of its source.
+- Derived from SSL4EO-S12 v1.1 (CC BY 4.0), Blumenstiel, Ait Ali Braham, Albrecht,
+  Maurogiovanni and Fraccaro, arXiv:2503.00168, which builds on SSL4EO-S12, Wang,
+  Ait Ali Braham, Xiong, Liu, Albrecht and Zhu, arXiv:2211.07044.
+  https://huggingface.co/datasets/embed2scale/SSL4EO-S12-v1.1
+- Contains modified Copernicus Sentinel data 2019-2021 (required notice under the
+  Copernicus Sentinel data licence).
+- Changes made to the source data: centre-crop and 2x2 averaging to 128x128 at 20 m
+  (radar in linear power), 8-bit normalisation, filtering and selection, and added
+  metadata. The dataset card lists them in full.
