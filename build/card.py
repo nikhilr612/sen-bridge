@@ -21,8 +21,8 @@ import yaml
 
 from package import FEATURES, SPLITS
 
-#: Filled in by the Hub when the dataset is published.
-_DOI_PLACEHOLDER = "TODO"
+#: Minted by the Hub for ``nikhilr01/sen-bridge``.
+_DOI = "10.57967/hf/11204"
 _LARGE = 100_000
 _ORDER = ("train", "val", "test")
 
@@ -147,7 +147,7 @@ scenes. The estimated effect of all filters on the clearly-bad rate is about 2.0
 
 Fixes ship as new tagged revisions with a changelog; v1.0 is never overwritten. Test
 targets are public; select models on validation only. Citation/DOI: {doi} (minted by
-the Hub at publication).
+the Hub).
 """
 
 
@@ -161,7 +161,8 @@ _CITATION = """
   title  = {{SEN-Bridge}: A SAR-to-Optical Flow Matching Dataset},
   author = {Raghavendra, Nikhil},
   year   = {2026},
-  note   = {Dataset. DOI to be assigned at publication.}
+  doi    = {10.57967/hf/11204},
+  url    = {https://huggingface.co/datasets/nikhilr01/sen-bridge}
 }
 @article{blumenstiel2025ssl4eos12v11,
   title   = {{SSL4EO-S12 v1.1}: A Multimodal, Multiseasonal Dataset for
@@ -259,7 +260,7 @@ def body(stats: dict[str, Any], thresholds: dict[str, Any]) -> str:
                 f"| `{k}` | {v} |" for k, v in thresholds["constants"].items()
             ),
             clean=stats["clean_share"],
-            doi=_DOI_PLACEHOLDER,
+            doi=_DOI,
         )
         + _CITATION
     )
