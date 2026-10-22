@@ -110,38 +110,32 @@ def assign_splits(
     return out
 
 
-def enforce_min_distance(
+def drop_within(
     df: pd.DataFrame,
-    split: pd.Series,
+    reference: pd.DataFrame,
     km: float = constants.SPLIT_MIN_DIST_KM,
-) -> pd.Series:
-    """Move validation and test rows that are too close to any train row into train.
+) -> pd.DataFrame:
+    """Drop the rows that lie within ``km`` of any reference row.
 
-    A row moved into train can itself be within ``km`` of another validation or test
-    row, so the check repeats until no row is left to move. Each pass only adds rows
-    to train, so it terminates.
+    The reference is a split that has already been chosen. Dropping from the rest,
+    and never from the reference, keeps the chosen split's size and composition
+    independent of the splits chosen after it.
 
     Args:
-        df: Rows with ``lat`` and ``lon`` columns.
-        split: Split of each row.
-        km: Minimum allowed distance to a train row, in kilometres.
+        df: Rows to filter, with ``lat`` and ``lon`` columns.
+        reference: Rows to keep away from, with ``lat`` and ``lon`` columns.
+        km: Minimum allowed distance to every reference row, in kilometres.
 
     Returns:
-        A new split series in which every validation and test row is at least ``km``
-        from every train row.
+        The rows of ``df`` that are at least ``km`` from every reference row.
     """
-    split = split.copy()
-    while True:
-        is_train = split == "train"
-        if is_train.all() or not is_train.any():
-            return split
-        tree = cKDTree(_unit(df.loc[is_train, "lat"], df.loc[is_train, "lon"]))
-        others = df.loc[~is_train]
-        dist, _ = tree.query(_unit(others["lat"], others["lon"]))
-        too_close = split.index[~is_train][dist * _EARTH_RADIUS_KM < km]
-        if len(too_close) == 0:
-            return split
-        split[too_close] = "train"
+    if df.empty or reference.empty:
+        return df
+    tree = cKDTree(_unit(reference["lat"], reference["lon"]))
+    dist, _ = tree.query(_unit(df["lat"], df["lon"]))
+    far = np.asarray(dist) * _EARTH_RADIUS_KM >= km
+    # pandas-stubs lose the DataFrame type through boolean-array indexing.
+    return cast("pd.DataFrame", df[far])
 
 
 def stratified_downsample(
@@ -242,3 +236,78 @@ def cap_water(
         The kept rows in their original order.
     """
     return cap_share(df, df[col] > constants.WATER_CROP_FRAC, cap, seed)
+
+
+def is_water(df: pd.DataFrame) -> pd.Series:
+    """Flag water-dominated crops, judged by the optical mask.
+
+    Args:
+        df: Rows with a ``water_frac_opt`` column.
+
+    Returns:
+        Boolean series aligned with ``df``.
+    """
+    return df["water_frac_opt"] > constants.WATER_CROP_FRAC
+
+
+def is_bare(df: pd.DataFrame) -> pd.Series:
+    """Flag bare-ground crops, judged by the land-cover layer.
+
+    Args:
+        df: Rows with a ``lulc_bare`` column.
+
+    Returns:
+        Boolean series aligned with ``df``.
+    """
+    return df["lulc_bare"] >= constants.BARE_CROP_FRAC
+
+
+#: The caps applied to every split as (membership test, largest share).
+CAPS = (
+    (is_water, constants.WATER_SPLIT_CAP),
+    (is_bare, constants.BARE_SPLIT_CAP),
+)
+
+
+def select_capped(
+    pool: pd.DataFrame,
+    n: int,
+    seed: int = 0,
+    region_col: str = "region",
+) -> pd.DataFrame:
+    """Choose ``n`` rows by region with every cap in :data:`CAPS` met exactly.
+
+    The sample is region-stratified. If it ends up with more members of a capped
+    kind than the cap allows, the excess members are swapped for random non-members
+    from the rest of the pool, so the size stays ``n`` and the cap holds exactly
+    rather than on average.
+
+    Args:
+        pool: Candidate rows.
+        n: Number of rows wanted. If the pool is not larger, all of it is returned.
+        seed: Seed of every random choice.
+        region_col: Column holding the region of each row.
+
+    Returns:
+        The chosen rows.
+    """
+    rng = np.random.default_rng(seed)
+    shares = pool[region_col].value_counts(normalize=True)
+    pre_share = {str(k): float(v) for k, v in shares.items()}
+    chosen = stratified_downsample(pool, n, region_col, pre_share, seed)
+    rest = pool.drop(index=chosen.index)
+    for member_of, cap in CAPS:
+        flag = member_of(chosen)
+        excess = int(flag.sum()) - int(np.floor(cap * len(chosen)))
+        if excess <= 0:
+            continue
+        out = chosen.index[flag][rng.permutation(int(flag.sum()))[:excess]]
+        capped = pd.Series(data=False, index=rest.index)
+        for kind, _ in CAPS:
+            capped |= kind(rest)
+        candidates = rest.index[~capped]
+        take = candidates[rng.permutation(len(candidates))[:excess]]
+        chosen = pd.concat([chosen.drop(index=out), rest.loc[take]])
+        rest = pd.concat([rest.drop(index=take), pool.loc[out]])
+    # pandas-stubs lose the DataFrame type through ``concat``.
+    return cast("pd.DataFrame", chosen.sort_index())

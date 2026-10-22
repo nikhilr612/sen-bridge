@@ -80,6 +80,8 @@ _CANDIDATE_COLUMNS = [
     "doy",
     "tar",
 ]
+#: Order in which the splits are chosen: the benchmark's test set comes first.
+_CHOICE_ORDER = ("test", "val", "train")
 _CELL_DEG = 2  # clusters are 2x2 degree cells (the seed-city list is not shipped)
 _CELL_STRIDE = 1000
 _ROW_GROUP = 100
@@ -134,46 +136,40 @@ def kept_examples(results: pd.DataFrame, candidates: pd.DataFrame) -> pd.DataFra
     return cast("pd.DataFrame", df.reset_index(drop=True))  # stubs lose the type
 
 
-def split_and_cap(df: pd.DataFrame, seed: int) -> pd.DataFrame:
-    """Assign splits, enforce the 5 km leakage check and apply the caps.
+def select_release(
+    df: pd.DataFrame,
+    target: dict[str, int],
+    seed: int,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Choose the three splits in order of importance, keeping them 5 km apart.
+
+    Test is chosen first, then validation, then train. After each split is chosen,
+    the rows of the splits still to come that lie within 5 km of it are dropped, so
+    the chosen split keeps its exact size and its composition never depends on the
+    later choices. The water and bare-ground caps are applied to every split.
 
     Args:
-        df: Output of :func:`kept_examples`.
+        df: Rows with ``split`` and ``region`` columns (clusters already assigned).
+        target: Wanted number of rows per split.
         seed: Seed of every random choice.
 
     Returns:
-        The rows that remain, with a ``split`` column.
+        The chosen rows, and the number of rows dropped for distance, keyed
+        ``<later split>_near_<chosen split>``.
     """
-    df["split"] = splits.assign_splits(df, seed=seed)
-    outside = int((df["split"] != "train").sum())
-    df["split"] = splits.enforce_min_distance(df, df["split"])
-    moved = outside - int((df["split"] != "train").sum())
-    print("proximity check moved", moved, "rows to train")
-    df = splits.cap_water(df, seed=seed)
-    bare = df["lulc_bare"] >= constants.BARE_CROP_FRAC
-    return splits.cap_share(df, bare, constants.BARE_SPLIT_CAP, seed=seed)
-
-
-def choose(df: pd.DataFrame, target: dict[str, int], seed: int) -> pd.DataFrame:
-    """Downsample each split to its target, stratified by region.
-
-    Args:
-        df: Rows with ``split`` and ``region`` columns.
-        target: Wanted number of rows per split (all rows if fewer exist).
-        seed: Seed of the random sample.
-
-    Returns:
-        The sampled rows.
-    """
-    parts = []
-    for name, group in df.groupby("split"):
-        counts = group["region"].value_counts(normalize=True)
-        share = {str(k): float(v) for k, v in counts.items()}
-        n = min(target[str(name)], len(group))
-        parts.append(
-            splits.stratified_downsample(group, n, pre_share=share, seed=seed)
-        )
-    return pd.concat(parts)
+    pools = {str(k): g for k, g in df.groupby("split")}
+    chosen: dict[str, pd.DataFrame] = {}
+    dropped: dict[str, int] = {}
+    for i, name in enumerate(_CHOICE_ORDER):
+        pool = pools[name]
+        for member_of, cap in splits.CAPS:
+            pool = splits.cap_share(pool, member_of(pool), cap, seed=seed)
+        chosen[name] = splits.select_capped(pool, target[name], seed)
+        for later in _CHOICE_ORDER[i + 1 :]:
+            before = len(pools[later])
+            pools[later] = splits.drop_within(pools[later], chosen[name])
+            dropped[f"{later}_near_{name}"] = before - len(pools[later])
+    return pd.concat(chosen.values()), dropped
 
 
 def clean_flag(d: pd.DataFrame) -> pd.Series:
@@ -314,6 +310,7 @@ def build_stats(
     results: pd.DataFrame,
     df: pd.DataFrame,
     files: list[Path],
+    dropped: dict[str, int],
 ) -> dict[str, object]:
     """Summarise the release for the dataset card.
 
@@ -321,6 +318,7 @@ def build_stats(
         results: Every fetched candidate.
         df: The released rows.
         files: The data files written.
+        dropped: Rows dropped for the 5 km rule, by split pair.
 
     Returns:
         Counts, shares and sizes, JSON-serialisable.
@@ -331,6 +329,7 @@ def build_stats(
         "kept_by_filters": int((results["status"] == "kept").sum()),
         "rejects": {k: int(v) for k, v in status.items() if k != "kept"},
         "final": df["split"].value_counts().to_dict(),
+        "dropped_for_distance": dropped,
         "clean_share": float(df["clean"].mean()),
         "water_crops": float(
             (df["water_frac_opt"] > constants.WATER_CROP_FRAC).mean()
@@ -369,12 +368,13 @@ def main() -> None:
         out / "rejects" / "rejects.parquet"
     )
     candidates = pd.read_parquet(args.candidates)
-    df = split_and_cap(kept_examples(results, candidates), args.seed)
+    df = kept_examples(results, candidates)
+    df["split"] = splits.assign_splits(df, seed=args.seed)
     target = {"train": args.target - args.val - args.test, "val": args.val}
     target["test"] = args.test
-    df = add_derived(
-        choose(df, target, args.seed).reset_index(drop=True), args.seed
-    )
+    df, dropped = select_release(df, target, args.seed)
+    print("dropped for the 5 km rule:", dropped)
+    df = add_derived(df.reset_index(drop=True), args.seed)
 
     files: list[Path] = []
     for name in SPLITS:
@@ -383,7 +383,7 @@ def main() -> None:
         )
     copy_references(out)
     write_manifest(out, files)
-    stats = build_stats(results, df, files)
+    stats = build_stats(results, df, files, dropped)
     (out / "build_stats.json").write_text(
         json.dumps(stats, indent=2, default=int), encoding="utf-8"
     )

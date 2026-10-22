@@ -72,26 +72,58 @@ def test_splits_and_downsample() -> None:
     })
     df["cluster_id"] = splits.assign_clusters(df, df.sample(50, random_state=0))
     df["stratum"] = np.where(df["lat"] > 0, "N", "S")
-    df["split"] = splits.enforce_min_distance(df, splits.assign_splits(df))
+    df["split"] = splits.assign_splits(df)
     assert (df.groupby("cluster_id")["split"].nunique() <= 2).all()
     df["region"] = rng.choice(list("ABC"), len(df), p=[0.6, 0.3, 0.1])
     assert len(splits.stratified_downsample(df, 500)) == 500
 
 
-def test_min_distance_follows_chains_of_moved_rows() -> None:
-    # B is 3 km from the train row A, C is 6 km from A but 3 km from B. Moving B
-    # into train must also move C; a single pass would leave C within 5 km of B.
+def test_drop_within_removes_only_rows_near_the_reference() -> None:
     step = 3 / 111.195  # degrees of longitude per 3 km at the equator
-    df = pd.DataFrame({"lat": [0.0, 0.0, 0.0], "lon": [0.0, step, 2 * step]})
-    split = pd.Series(["train", "val", "test"])
-    out = splits.enforce_min_distance(df, split, km=5.0)
-    assert out.tolist() == ["train", "train", "train"]
+    reference = pd.DataFrame({"lat": [0.0], "lon": [0.0]})
+    rows = pd.DataFrame({"lat": [0.0, 0.0, 0.0], "lon": [step, 2 * step, 1.0]})
+    kept = splits.drop_within(rows, reference, km=5.0)
+    # 3 km is dropped; 6 km (beyond the rule) and 111 km stay.
+    assert kept["lon"].round(4).tolist() == [round(2 * step, 4), 1.0]
 
 
-def test_min_distance_keeps_far_rows_in_place() -> None:
-    df = pd.DataFrame({"lat": [0.0, 0.0], "lon": [0.0, 1.0]})  # about 111 km apart
-    out = splits.enforce_min_distance(df, pd.Series(["train", "val"]), km=5.0)
-    assert out.tolist() == ["train", "val"]
+def test_drop_within_with_no_reference_returns_everything() -> None:
+    rows = pd.DataFrame({"lat": [0.0], "lon": [0.0]})
+    assert len(splits.drop_within(rows, rows.iloc[0:0])) == 1
+
+
+def _pool(n: int, seed: int = 0) -> pd.DataFrame:
+    """Build a pool with regions and water / bare-ground shares above the caps.
+
+    Args:
+        n: Number of rows.
+        seed: Seed of the draw.
+
+    Returns:
+        Rows with the columns the selection uses.
+    """
+    rng = np.random.default_rng(seed)
+    return pd.DataFrame({
+        "region": rng.choice(list("ABC"), n, p=[0.6, 0.3, 0.1]),
+        "water_frac_opt": np.where(rng.random(n) < 0.30, 0.95, 0.0),
+        "lulc_bare": np.where(rng.random(n) < 0.20, 0.9, 0.0),
+    })
+
+
+def test_select_capped_is_exact_in_size_and_caps() -> None:
+    pool = _pool(5000)
+    chosen = splits.select_capped(pool, 1000, seed=3)
+    assert len(chosen) == 1000
+    assert chosen.index.is_unique
+    assert splits.is_water(chosen).sum() <= 0.10 * 1000
+    assert splits.is_bare(chosen).sum() <= 0.08 * 1000
+
+
+def test_select_capped_on_a_small_pool_obeys_the_caps_without_padding() -> None:
+    pool = _pool(50)
+    chosen = splits.select_capped(pool, 1000)
+    assert len(chosen) <= 50  # never more rows than the pool holds
+    assert splits.is_water(chosen).sum() <= 0.10 * len(chosen)
 
 
 def test_cap_share_respects_cap_per_split() -> None:

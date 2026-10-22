@@ -188,13 +188,14 @@ def check_rows(df: pd.DataFrame) -> list[Result]:
 
 
 def check_leakage(df: pd.DataFrame) -> Result:
-    """Recompute the distance from each validation and test crop to the train set.
+    """Recompute the distance between every pair of splits.
 
     Args:
         df: Released rows.
 
     Returns:
-        Passes if the minimum distance is at least the 5 km guarantee.
+        Passes if the nearest pair of rows in any two different splits is at least
+        the 5 km guarantee apart.
     """
 
     def unit(sub: pd.DataFrame) -> np.ndarray:
@@ -206,14 +207,17 @@ def check_leakage(df: pd.DataFrame) -> Result:
             [np.cos(phi) * np.cos(lam), np.cos(phi) * np.sin(lam), np.sin(phi)], -1
         )
 
-    train = df[df["split"] == "train"]
-    other = df[df["split"] != "train"]
-    dist, _ = cKDTree(unit(train)).query(unit(other))
-    nearest = float(np.asarray(dist).min() * _EARTH_RADIUS_KM)
+    nearest = {}
+    for first, second in (("test", "train"), ("val", "train"), ("test", "val")):
+        a, b = df[df["split"] == first], df[df["split"] == second]
+        dist, _ = cKDTree(unit(b)).query(unit(a))
+        nearest[f"{first}-{second}"] = round(
+            float(np.asarray(dist).min() * _EARTH_RADIUS_KM), 2
+        )
     return Result(
         "5 km leakage guarantee",
-        nearest >= constants.SPLIT_MIN_DIST_KM - _EPS,
-        f"nearest val/test-to-train distance {nearest:.2f} km",
+        min(nearest.values()) >= constants.SPLIT_MIN_DIST_KM - _EPS,
+        f"nearest cross-split distances in km: {nearest}",
     )
 
 
