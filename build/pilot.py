@@ -64,10 +64,9 @@ def process(row, remotes, index, out: Path):
         why = "overexposed"
     elif rec["opt_mean"] < C.DARK_MEAN_MIN:
         why = "too_dark"
-    elif filters.border_noise(sar):
-        why = "border_noise"
-    elif rec["rfi_score"] > C.RFI_Z:
-        why = "rfi"
+    elif (rec["opt_mean"] > C.FLAT_BRIGHT_MEAN and rec["opt_std"] < C.WHITE_FLAT_STD
+          and rec["lulc_bare"] + rec["lulc_rangeland"] >= C.ARID_LULC_MIN):
+        why = "featureless_arid"
     elif rec["water_frac_sar"] - rec["water_frac_opt"] > C.WATER_MISMATCH and rec["lulc_water"] > C.LULC_WATER_MIN:
         why = "water_mismatch"
     elif filters.steep(fl["slope_std"]):

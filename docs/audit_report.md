@@ -36,3 +36,9 @@ Resolution limit: whole-pixel shifts only.
 - Radar water test (VV<-18 dB) misses wind-roughened sea: >90%-water crops are 5.1% by radar but 10.4% by the S2 mask. The water cap now uses the S2 mask.
 - Radar says water / optical says land: 6.8% of crops, but 506 of 653 are arid (dark sand), not tidal. Only 71 (0.7%) also have mapped water; they are excluded as `water_mismatch`
   (tide or flood). Tides cannot be separated from floods without a tide model; the filter is a cheap proxy.
+
+## Lean filter set
+Removed as filters (kept as recorded scores `rfi_score`, `border_frac`): RFI (0 of 26 audited rejects were bad) and radar border noise (mostly good dark/water pairs at 1%, no rejects at 10%).
+Active exclusions: invalid/no-data, black, saturated (>1%), featureless near-white, featureless bright arid, opaque cloud (>=50%), neural cloud/shadow (>=5%),
+water mismatch, slope >8 deg, elevation >2000 m. Estimated effect (rounds 2-3): clearly-bad pairs ~2.0% -> ~1.1%; with my uncertain calls ~10.9% -> ~8.1%.
+A `clean` flag (neural mask exactly 0, textured optical or confirmed water, mean 0.10-0.80) covers 63% of kept crops with 2.0% uncertain-bad and 0/297 clearly bad; not yet implemented.

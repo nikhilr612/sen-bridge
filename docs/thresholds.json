@@ -40,10 +40,12 @@
     "WATER_MISMATCH": 0.3,
     "LULC_WATER_MIN": 0.05,
     "BARE_SPLIT_CAP": 0.08,
-    "BARE_CROP_FRAC": 0.5
+    "BARE_CROP_FRAC": 0.5,
+    "FLAT_BRIGHT_MEAN": 0.88,
+    "ARID_LULC_MIN": 0.5
   },
-  "sha256": "7b76d13814f3ff0f67ccd89691a515a8c1363cb3e75be839e82dcce9e7f9f9dc",
-  "code_commit": "d9d941a99e061bcfb70ad91ee103924114977f9c",
+  "sha256": "63d480b904867e87a69fb86a023ca8dd0a5f4ddd577d3c5f06dc9c60928b4510",
+  "code_commit": "de0cb8083e5ef5a8dedec501e14df6a7a7163a31",
   "source_commit": "97a91733db962222e1e6b40a836845ddbbb16b86",
   "seed": 0
 }
