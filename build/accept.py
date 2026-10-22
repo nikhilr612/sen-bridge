@@ -4,7 +4,7 @@
 
 Usage::
 
-    python build/accept.py RELEASE_DIR [--min-test 20000] [--min-val 3000]
+    python build/accept.py RELEASE_DIR [--min-test 30000] [--min-val 15000]
         [--min-train 100000] [--max-fid-floor 50] [--skip-load-dataset]
 
 Each check is independent and reads the release as a user would, not the build's
@@ -629,8 +629,8 @@ def main() -> None:
     """Run every check, time each one, and exit non-zero on a failure."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("release", type=Path)
-    parser.add_argument("--min-test", type=int, default=20_000)
-    parser.add_argument("--min-val", type=int, default=10_000)
+    parser.add_argument("--min-test", type=int, default=30_000)
+    parser.add_argument("--min-val", type=int, default=15_000)
     parser.add_argument("--min-train", type=int, default=100_000)
     parser.add_argument("--max-fid-floor", type=float, default=50.0)
     parser.add_argument("--skip-load-dataset", action="store_true")

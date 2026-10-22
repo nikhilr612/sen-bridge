@@ -83,8 +83,8 @@ _CANDIDATE_COLUMNS = [
 #: Order in which the splits are chosen: the benchmark's test set comes first.
 _CHOICE_ORDER = ("test", "val", "train")
 #: Pool sizes as a multiple of the target: room for the caps and the 5 km drops.
-_TEST_POOL_MARGIN = 1.25
-_VAL_POOL_MARGIN = 2.5
+_TEST_POOL_MARGIN = 1.15
+_VAL_POOL_MARGIN = 1.7
 _CELL_DEG = 1  # clusters are 1x1 degree cells (the seed-city list is not shipped)
 _CELL_STRIDE = 1000
 _ROW_GROUP = 100
@@ -361,9 +361,9 @@ def main() -> None:
     parser.add_argument("build", type=Path)
     parser.add_argument("candidates", type=Path)
     parser.add_argument("out", type=Path)
-    parser.add_argument("--target", type=int, default=150_000)
-    parser.add_argument("--test", type=int, default=20_000)
-    parser.add_argument("--val", type=int, default=5_000)
+    parser.add_argument("--target", type=int, default=170_000)
+    parser.add_argument("--test", type=int, default=30_000)
+    parser.add_argument("--val", type=int, default=15_000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--rows-per-shard", type=int, default=7000)
     args = parser.parse_args()
