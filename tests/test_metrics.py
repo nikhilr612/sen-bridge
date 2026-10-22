@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+import torch
 
 from sen_bridge import fid_core
-
-torch = pytest.importorskip("torch")
-from sen_bridge import torch as sbt  # ruff: ignore[module-import-not-at-top-of-file]
+from sen_bridge import torch as sbt
+from sen_bridge.resize import resize_batch
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -105,8 +105,6 @@ def test_lpips_matches_reference_package(pair: Pair) -> None:
 @pytest.mark.usefixtures("weights_ready")
 def test_inception_features_match_pytorch_fid(pair: Pair) -> None:
     pf = pytest.importorskip("pytorch_fid.inception")
-    from sen_bridge.resize import resize_batch  # ruff: ignore[import-outside-top-level]
-
     xt = torch.from_numpy(pair[0][:4])
     u8 = torch.round((xt + 1) * 127.5).to(torch.uint8)
     resized = resize_batch(u8.permute(0, 2, 3, 1).numpy())

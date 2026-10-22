@@ -150,6 +150,8 @@ def front_matter(stats: dict[str, Any]) -> dict[str, Any]:
         }
         for k in _ORDER
     ]
+    # The public API has no YAML export of the features.
+    features = FEATURES._to_yaml_list()  # ruff: ignore[private-member-access]
     return {
         "license": "cc-by-4.0",
         "pretty_name": "SEN-Bridge",
@@ -172,7 +174,7 @@ def front_matter(stats: dict[str, Any]) -> dict[str, Any]:
                 ],
             }
         ],
-        "dataset_info": {"features": FEATURES._to_yaml_list(), "splits": splits},  # ruff: ignore[private-member-access]
+        "dataset_info": {"features": features, "splits": splits},
     }
 
 

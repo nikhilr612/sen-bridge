@@ -62,8 +62,8 @@ SOURCES: dict[str, Source] = {
     # on first download.
     "lpips_lin": Source(
         url=(
-            "https://raw.githubusercontent.com/richzhang/PerceptualSimilarity/master/"
-            "lpips/weights/v0.1/vgg.pth"
+            "https://raw.githubusercontent.com/richzhang/"
+            "PerceptualSimilarity/master/lpips/weights/v0.1/vgg.pth"
         ),
         sha256="a78928a0af1e5f0fcb1f3b9e8f8c3a2a5a3de244d830ad5c1feddc79b8432868",
     ),
@@ -122,7 +122,10 @@ def _fetch(name: str) -> Path:
     dst.parent.mkdir(exist_ok=True)
     if not dst.exists():
         partial = dst.with_suffix(".part")
-        urllib.request.urlretrieve(src.url, partial)  # ruff: ignore[suspicious-url-open-usage]  (HTTPS scheme checked above)
+        # The HTTPS scheme was checked above.
+        urllib.request.urlretrieve(  # ruff: ignore[suspicious-url-open-usage]
+            src.url, partial
+        )
         partial.rename(dst)
     digest = _sha256(dst)
     if digest != src.sha256 or (
@@ -144,11 +147,11 @@ def prepare() -> None:
     files.
     """
     # torch is an optional dependency that only this one-off conversion needs.
+    import safetensors.torch as st  # ruff: ignore[import-outside-top-level]
     import torch  # ruff: ignore[import-outside-top-level]
-    from safetensors.torch import save_file  # ruff: ignore[import-outside-top-level]
 
     fid = torch.load(_fetch("fid_inception"), map_location="cpu", weights_only=True)
-    save_file(
+    st.save_file(
         {k: v.contiguous() for k, v in fid.items()},
         cache_dir() / "fid_inception.safetensors",
     )
@@ -164,7 +167,7 @@ def prepare() -> None:
     tensors.update({
         k: v.contiguous() for k, v in lin.items()
     })  # lin0.model.1.weight ...
-    save_file(tensors, cache_dir() / "lpips_vgg.safetensors")
+    st.save_file(tensors, cache_dir() / "lpips_vgg.safetensors")
 
 
 def path(name: str) -> Path:

@@ -147,7 +147,8 @@ def run_pilot(
         for i, future in enumerate(as_completed(futures), 1):
             try:
                 record, reason = future.result()
-            except Exception as exc:  # ruff: ignore[blind-except]  (keep going; the failure is recorded)
+            # Keep going; the failure is recorded as a reason.
+            except Exception as exc:  # ruff: ignore[blind-except]
                 record, reason = (
                     {"id": futures[future][0]},
                     f"error:{type(exc).__name__}",

@@ -92,14 +92,16 @@ class TorchBackend:
             stats: Real-target statistics file, or ``None`` to featurise the
                 targets.
         """
-        import torch  # ruff: ignore[import-outside-top-level]  (optional dependency)
+        # torch is an optional dependency, imported only when selected.
+        import torch  # ruff: ignore[import-outside-top-level]
 
         from sen_bridge import torch as sb  # ruff: ignore[import-outside-top-level]
 
         self._torch, self._sb = torch, sb
         self._fid = sb.FID.from_stats(stats) if stats else sb.FID()
 
-    def _prep(self, x: NDArray[Any]) -> Any:  # ruff: ignore[any-type]  (a framework tensor)
+    # Returns a framework tensor, which has no common static type.
+    def _prep(self, x: NDArray[Any]) -> Any:  # ruff: ignore[any-type]
         return self._torch.from_numpy(to_float(x)).permute(0, 3, 1, 2)
 
     def paired(
@@ -149,7 +151,8 @@ class JaxBackend:
             stats: Real-target statistics file, or ``None`` to featurise the
                 targets.
         """
-        import jax  # ruff: ignore[import-outside-top-level]  (optional dependency)
+        # jax is an optional dependency, imported only when selected.
+        import jax  # ruff: ignore[import-outside-top-level]
         import jax.numpy as jnp  # ruff: ignore[import-outside-top-level]
 
         from sen_bridge import jax as sb  # ruff: ignore[import-outside-top-level]

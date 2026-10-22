@@ -6,17 +6,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
+import torch
 
 from conftest import structured_images
-
-torch = pytest.importorskip("torch")
-jax = pytest.importorskip("jax")
-import jax.numpy as jnp  # ruff: ignore[module-import-not-at-top-of-file]
-
-from sen_bridge import jax as sbj  # ruff: ignore[module-import-not-at-top-of-file]
-from sen_bridge import torch as sbt  # ruff: ignore[module-import-not-at-top-of-file]
+from sen_bridge import jax as sbj
+from sen_bridge import torch as sbt
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

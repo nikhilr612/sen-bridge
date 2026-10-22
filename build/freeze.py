@@ -34,7 +34,8 @@ def git_head() -> str:
     git = shutil.which("git")
     if git is None:
         return ""
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  (fixed arguments, no user input)
+    # Fixed arguments, no user input.
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
         [git, "rev-parse", "HEAD"], capture_output=True, text=True, check=False
     )
     return result.stdout.strip()

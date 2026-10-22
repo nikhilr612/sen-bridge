@@ -208,7 +208,9 @@ class _LPIPS(nn.Module):
         return taps
 
     @override
-    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:  # ty: ignore[invalid-mutable-override]
+    def forward(  # ty: ignore[invalid-mutable-override]
+        self, x: torch.Tensor, y: torch.Tensor
+    ) -> torch.Tensor:
         """Compute the LPIPS distance.
 
         Args:
@@ -375,7 +377,9 @@ class _FIDInception(nn.Module):
         self.eval().requires_grad_(requires_grad=False)
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # ty: ignore[invalid-mutable-override]
+    def forward(  # ty: ignore[invalid-mutable-override]
+        self, x: torch.Tensor
+    ) -> torch.Tensor:
         """Extract pooled Inception features.
 
         Args:

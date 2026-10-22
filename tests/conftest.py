@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from importlib.util import find_spec
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -14,6 +15,13 @@ if TYPE_CHECKING:
 
 _SIZE = 128
 _BLUR = 5
+
+# Skip modules whose framework is not installed instead of failing collection.
+collect_ignore: list[str] = []
+if find_spec("torch") is None:
+    collect_ignore += ["test_metrics.py", "test_parity.py"]
+if find_spec("jax") is None:
+    collect_ignore.append("test_parity.py")
 
 
 def structured_images(n: int, seed: int = 0) -> NDArray[np.float32]:
@@ -54,5 +62,6 @@ def weights_ready() -> None:
     try:
         weights.path("fid_inception")
         weights.path("lpips_vgg")
-    except Exception as exc:  # ruff: ignore[blind-except]  (offline or host unavailable)
+    # Offline or the host is unavailable.
+    except Exception as exc:  # ruff: ignore[blind-except]
         pytest.skip(f"weights unavailable: {exc}")

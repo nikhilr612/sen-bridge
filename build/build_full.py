@@ -77,7 +77,8 @@ def process_row(
     try:
         members = {m: index[m][zarr] for m in MODALITIES}
         done = compute(sample_id, season, remotes, members)
-    except Exception as exc:  # ruff: ignore[blind-except]  (recorded, not fatal: a rerun retries only missing shards)
+    # Recorded, not fatal: a rerun retries only the missing shards.
+    except Exception as exc:  # ruff: ignore[blind-except]
         return {"id": sample_id, "status": f"error:{type(exc).__name__}"}
     row: dict[str, object] = {**done.record, "status": done.reason or "kept"}
     if done.reason is None:
@@ -185,7 +186,8 @@ def main() -> None:
         for future in futures:
             try:
                 tar, summary, count = future.result()
-            except Exception:  # ruff: ignore[blind-except]  (log and continue; a rerun resumes the missing shards)
+            # Log and continue; a rerun resumes the missing shards.
+            except Exception:  # ruff: ignore[blind-except]
                 traceback.print_exc()
                 continue
             done += 1
