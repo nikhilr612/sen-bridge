@@ -103,7 +103,10 @@ class TorchBackend:
 
     # Returns a framework tensor, which has no common static type.
     def _prep(self, x: NDArray[Any]) -> Any:  # ruff: ignore[any-type]
-        return self._torch.from_numpy(to_float(x)).permute(0, 3, 1, 2)
+        batch = self._torch.from_numpy(to_float(x)).permute(0, 3, 1, 2)
+        return batch.to(
+            self._fid.device
+        )  # LPIPS-VGG on 30k pairs is far too slow on CPU
 
     def paired(
         self, gen: NDArray[Any], tgt: NDArray[Any]
@@ -119,9 +122,9 @@ class TorchBackend:
         """
         a, b = self._prep(gen), self._prep(tgt)
         return (
-            self._sb.psnr(a, b).numpy(),
-            self._sb.ssim(a, b).numpy(),
-            self._sb.lpips(a, b).numpy(),
+            self._sb.psnr(a, b).cpu().numpy(),
+            self._sb.ssim(a, b).cpu().numpy(),
+            self._sb.lpips(a, b).cpu().numpy(),
         )
 
     def feed(self, images: NDArray[Any], *, real: bool) -> None:
