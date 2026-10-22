@@ -1,37 +1,84 @@
-"""Frozen constants of the SEN-Bridge release (see the datasheet)."""
+# Copyright 2026 The sen-bridge authors.
+# SPDX-License-Identifier: Apache-2.0
+"""Frozen constants of the SEN-Bridge release (see the datasheet).
 
-CROP = 256  # centre crop of the 264x264 SSL4EO patch
-SIZE = 128  # after 2x2 averaging (20 m/pixel)
+Every threshold below is written to ``docs/thresholds.json`` with a SHA-256 by
+``build/freeze.py`` and must not be tuned against model scores.
+"""
 
-# radar clip ranges in dB: (lo, hi) for VV, VH, VV-VH
+# ---- Geometry and radiometry -----------------------------------------------------------------
+
+#: Side of the centre crop of the 264x264 SSL4EO patch, in 10 m pixels.
+CROP = 256
+#: Side of an example after 2x2 averaging (20 m per pixel).
+SIZE = 128
+#: Radar clip ranges in dB as (low, high) for VV, VH and VV-VH.
 SAR_CLIPS = ((-25.0, 0.0), (-32.0, -5.0), (0.0, 15.0))
-
-OPT_MAX = 0.3  # reflectance clip
+#: Upper reflectance clip of the optical image.
+OPT_MAX = 0.3
+#: Gamma applied to clipped reflectance.
 OPT_GAMMA = 1 / 2.2
+#: Digital number to reflectance divisor of Sentinel-2 L2A.
 S2_SCALE = 10000.0
 
-MAX_DT_HOURS = 48.0
-CLOUD_MAX_FRAC = 0.05  # SEnSeI cloud/shadow fraction per crop (audit: <6% all fine, >=9% mostly bad)
-CLOUD_RULE_REJECT = 0.5  # spectral rule is a score; only opaque cover rejects (urban/sand trip it)
-BORDER_DB = -35.0
-BORDER_MAX_FRAC = 0.10  # flag only, not a filter: audit showed 10/11 rejects at 1% were good dark/water pairs
-WATER_DB = -18.0
-WATER_CROP_FRAC = 0.90
-WATER_SPLIT_CAP = 0.10
-NOISE_FLOOR_DB = -28.0
-SLOPE_STD_MAX = 8.0  # degrees; coreg check: shift >3 px for 35-50% of crops above 6 deg (SAR not terrain-corrected)
-ELEV_MAX_M = 2000.0
-SNOW_LAT = 40.0
-SPLIT_MIN_DIST_KM = 5.0
-RFI_Z = 20.0  # flag only, not a filter: 0 of 26 audited RFI rejects were bad pairs
-SAT_MAX_FRAC = 0.01  # share of optical pixels with reflectance >= 1.0
-WHITE_MAX_FRAC = 0.40  # share of near-white pixels (min channel > 0.85) ...
-WHITE_FLAT_STD = 0.03  # ... counted only if also featureless: bad whites std<=0.02, textured sand/snow/roofs >=0.06
-DARK_MEAN_MIN = 0.08  # mean luminance of the 8-bit optical; bad 0.03-0.064, dimmest good crop seen 0.094
+# ---- Pair selection ----------------------------------------------------------------------------
 
-WATER_MISMATCH = 0.3  # radar water share minus optical water share, on crops with mapped water ...
-LULC_WATER_MIN = 0.05  # ... (tide/flood mismatch; excludes dark sand, where radar sees 'water' with no mapped water)
-BARE_SPLIT_CAP = 0.08  # share of each split allowed to be >=50% LULC bare ground (currently a no-op: ~3% of crops)
+#: Largest allowed absolute gap between radar and optical acquisition, in hours.
+MAX_DT_HOURS = 48.0
+#: Largest allowed share of cloud or shadow pixels per crop, from SSL4EO's neural mask. The audit
+#: found every crop below 6% fine and most at 9% or more bad.
+CLOUD_MAX_FRAC = 0.05
+#: Share of the spectral cloud rule above which a crop is rejected. The rule is otherwise only a
+#: score because roofs and pale sand trip it.
+CLOUD_RULE_REJECT = 0.5
+#: Share of optical pixels with reflectance of at least 1.0 above which a crop is rejected.
+SAT_MAX_FRAC = 0.01
+#: Share of near-white pixels (minimum channel above 0.85) above which a featureless crop is
+#: rejected.
+WHITE_MAX_FRAC = 0.40
+#: Luminance standard deviation below which a crop counts as featureless. Bad whites were at most
+#: 0.02, textured sand, snow and roofs at least 0.06.
+WHITE_FLAT_STD = 0.03
+#: Mean 8-bit luminance below which a crop is rejected. Bad crops were 0.03 to 0.064, the dimmest
+#: good crop seen was 0.094.
+DARK_MEAN_MIN = 0.08
+#: Mean luminance above which a featureless crop on arid land is rejected: cloud and haze cannot
+#: be told from pale sand.
+FLAT_BRIGHT_MEAN = 0.88
+#: Share of bare plus rangeland LULC above which land counts as arid.
+ARID_LULC_MIN = 0.50
+#: Radar water share minus optical water share above which a crop with mapped water is rejected
+#: (tide or flood mismatch).
+WATER_MISMATCH = 0.3
+#: Minimum LULC water share for the mismatch rule, which excludes dark sand that radar reads as
+#: water.
+LULC_WATER_MIN = 0.05
+#: Slope standard deviation above which a crop is rejected, in degrees. Radar is not
+#: terrain-corrected and shifts exceeded 3 px for 35 to 50% of crops above 6 degrees.
+SLOPE_STD_MAX = 8.0
+#: Mean elevation above which a crop is rejected, in metres.
+ELEV_MAX_M = 2000.0
+#: Latitude beyond which local winter months are excluded, in degrees.
+SNOW_LAT = 40.0
+
+# ---- Thresholds of recorded scores (the scores are not filters) ------------------------------
+
+#: Radar VV level below which a pixel counts as border noise, in dB.
+BORDER_DB = -35.0
+#: Radar VV level below which a pixel counts as water, in dB.
+WATER_DB = -18.0
+#: Radar VH level below which a pixel is under the noise floor, in dB.
+NOISE_FLOOR_DB = -28.0
+
+# ---- Splits and caps ---------------------------------------------------------------------------
+
+#: Water share above which a crop counts as water-dominated.
+WATER_CROP_FRAC = 0.90
+#: Largest share of each split made of water-dominated crops.
+WATER_SPLIT_CAP = 0.10
+#: Largest share of each split made of bare-ground crops (currently a no-op: about 3% of crops).
+BARE_SPLIT_CAP = 0.08
+#: Bare-ground share above which a crop counts as bare ground.
 BARE_CROP_FRAC = 0.50
-FLAT_BRIGHT_MEAN = 0.88  # featureless bright optical on arid land (LULC bare+rangeland): cloud/haze cannot be told from pale sand,
-ARID_LULC_MIN = 0.50  # so both are excluded; audit: 9 bad / 5 good among 14 such crops, 98% of them arid
+#: Minimum distance between any validation or test crop and any train crop, in kilometres.
+SPLIT_MIN_DIST_KM = 5.0

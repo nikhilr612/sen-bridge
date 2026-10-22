@@ -1,88 +1,177 @@
-"""Full build, step 3: stream every candidate shard, filter, and write one resumable Parquet part per tar shard.
+# Copyright 2026 The sen-bridge authors.
+# SPDX-License-Identifier: Apache-2.0
+"""Full build, step 3: stream every candidate shard, filter, and write a Parquet part per shard.
 
-Usage: python build/build_full.py candidates.parquet OUT_DIR [--shard-workers 12] [--sample-workers 16] [--limit-shards N]
+Usage::
 
-A part holds every candidate of the shard: status ('kept' or the reject reason), all scores/flags, and for kept
-rows the two PNGs as bytes. Re-running skips finished shards, so an interrupted build resumes. Rejected rows
-store no images. Nothing else is written to disk.
+    python build/build_full.py candidates.parquet OUT_DIR [--shard-workers 12] [--sample-workers 16]
+        [--limit-shards N]
+
+A part holds every candidate of the shard: status (``kept`` or the reject reason), all scores and
+flags, and for kept rows the two PNGs as bytes. Re-running skips finished shards, so an interrupted
+build resumes. Rejected rows store no images. Nothing else is written to disk.
 """
+
+from __future__ import annotations
+
 import argparse
 import io
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from PIL import Image
 
-from pilot import COMMIT, compute
-from sen_bridge_build import constants as C, stream
+from sen_bridge_build import constants, stream
+from sen_bridge_build.sample import MODALITIES, compute
 
-MODS = ("S2L2A", "S1GRD", "DEM", "LULC")
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    import numpy as np
+    from numpy.typing import NDArray
+
+#: Hugging Face commit of SSL4EO-S12 v1.1 that the build reads (recorded in the datasheet).
+COMMIT = "97a91733db962222e1e6b40a836845ddbbb16b86"
 
 
-def png(arr) -> bytes:
-    b = io.BytesIO()
-    Image.fromarray(arr.transpose(1, 2, 0)).save(b, format="PNG")
-    return b.getvalue()
+def to_png(arr: NDArray[np.uint8]) -> bytes:
+    """Encode a channel-first 8-bit image as PNG.
+
+    Args:
+        arr: Image of shape ``[3, H, W]``.
+
+    Returns:
+        The PNG file contents.
+    """
+    buffer = io.BytesIO()
+    Image.fromarray(arr.transpose(1, 2, 0)).save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
-def do_shard(tar: str, rows: pd.DataFrame, out: Path, sample_workers: int):
+def process_row(
+    sample_id: str,
+    season: int,
+    zarr: str,
+    remotes: Mapping[str, stream.Remote],
+    index: Mapping[str, Mapping[str, tuple[int, int]]],
+) -> dict[str, object]:
+    """Process one candidate, turning any failure into a status instead of an exception.
+
+    Args:
+        sample_id: Example id, ``<sample id>_<season>``.
+        season: Season index 0 to 3.
+        zarr: Name of the sample's zip inside the shards.
+        remotes: The shard of each modality.
+        index: Tar index of each modality's shard.
+
+    Returns:
+        A row for the part file: id, status, scores, and PNG bytes if the crop is kept.
+    """
+    try:
+        members = {m: index[m][zarr] for m in MODALITIES}
+        done = compute(sample_id, season, remotes, members)
+    except Exception as exc:  # ruff: ignore[blind-except]  (recorded, not fatal: a rerun retries only missing shards)
+        return {"id": sample_id, "status": f"error:{type(exc).__name__}"}
+    row: dict[str, object] = {**done.record, "status": done.reason or "kept"}
+    if done.reason is None:
+        row["sar_png"], row["optical_png"] = to_png(done.sar), to_png(done.optical)
+    return row
+
+
+def open_shard(
+    tar: str,
+    cache_dir: Path,
+) -> tuple[dict[str, stream.Remote], dict[str, dict[str, tuple[int, int]]]]:
+    """Open one shard of every modality and index its zip members.
+
+    Args:
+        tar: Shard name.
+        cache_dir: Directory of cached tar indices.
+
+    Returns:
+        The remote of each modality and, for each, a map from zip name to ``(offset, size)``.
+    """
+    remotes = {m: stream.Remote(COMMIT, "train", m, tar) for m in MODALITIES}
+    with ThreadPoolExecutor(len(MODALITIES)) as pool:  # the four header walks are independent
+        indices = list(pool.map(lambda m: stream.tar_index(remotes[m], cache_dir), MODALITIES))
+    index = {
+        m: {name.split("/")[-1]: v for name, v in idx.items()}
+        for m, idx in zip(MODALITIES, indices, strict=True)
+    }
+    return remotes, index
+
+
+def do_shard(
+    tar: str,
+    rows: pd.DataFrame,
+    out: Path,
+    sample_workers: int,
+) -> tuple[str, object, int]:
+    """Process every candidate of one shard and write its part file.
+
+    Args:
+        tar: Shard name.
+        rows: Candidates of the shard with ``id``, ``season`` and ``zarr`` columns.
+        out: Build directory.
+        sample_workers: Number of samples processed concurrently.
+
+    Returns:
+        The shard name, a summary (status counts, or ``"skipped"``) and the number of rows.
+    """
     part = out / "parts" / f"{tar}.parquet"
     if part.exists():
         return tar, "skipped", 0
-    remotes = {m: {tar: stream.Remote(COMMIT, "train", m, tar)} for m in MODS}
-    with ThreadPoolExecutor(len(MODS)) as ex:  # the four header walks are independent
-        idx = dict(zip(MODS, ex.map(lambda m: stream.tar_index(remotes[m][tar], out / "index"), MODS)))
-    index = {m: {tar: {k.split("/")[-1]: v for k, v in idx[m].items()}} for m in MODS}
-
-    def one(r):
-        try:
-            rec, why, sar, opt = compute(r, remotes, index)
-            rec["status"] = why or "kept"
-            if why is None:
-                rec["sar_png"], rec["optical_png"] = png(sar), png(opt)
-            return rec
-        except Exception as e:  # recorded, not fatal; resume reruns only missing shards
-            return {"id": r.id, "status": f"error:{type(e).__name__}"}
-
-    with ThreadPoolExecutor(sample_workers) as ex:
-        recs = list(ex.map(one, rows.itertuples()))
-    df = pd.DataFrame(recs)
+    remotes, index = open_shard(tar, out / "index")
+    jobs = list(zip(rows["id"], rows["season"], rows["zarr"], strict=True))
+    with ThreadPoolExecutor(sample_workers) as pool:
+        results = list(
+            pool.map(lambda j: process_row(str(j[0]), int(j[1]), str(j[2]), remotes, index), jobs)
+        )
+    frame = pd.DataFrame(results)
     tmp = part.with_suffix(".tmp")
     part.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(tmp)
+    frame.to_parquet(tmp)
     tmp.rename(part)
-    return tar, df.status.value_counts().to_dict(), len(df)
+    return tar, frame["status"].value_counts().to_dict(), len(frame)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("candidates"); ap.add_argument("out")
-    ap.add_argument("--shard-workers", type=int, default=12)
-    ap.add_argument("--sample-workers", type=int, default=16)
-    ap.add_argument("--limit-shards", type=int, default=0)
-    a = ap.parse_args()
-    out = Path(a.out)
-    df = pd.read_parquet(a.candidates)
-    df = df[df.cloud_cover <= C.CLOUD_MAX_FRAC]
-    groups = [(t, g) for t, g in df.groupby("tar")]
-    if a.limit_shards:
-        groups = groups[:a.limit_shards]
-    todo = [(t, g) for t, g in groups if not (out / "parts" / f"{t}.parquet").exists()]
-    print(f"{len(df)} candidates, {len(groups)} shards, {len(todo)} to do", flush=True)
-    t0, done, n = time.time(), 0, 0
-    with ThreadPoolExecutor(a.shard_workers) as ex:
-        futs = [ex.submit(do_shard, t, g, out, a.sample_workers) for t, g in todo]
-        for f in futs:
+def main() -> None:
+    """Run the full build over all shards of the candidate table."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("candidates", type=Path)
+    parser.add_argument("out", type=Path)
+    parser.add_argument("--shard-workers", type=int, default=12)
+    parser.add_argument("--sample-workers", type=int, default=16)
+    parser.add_argument("--limit-shards", type=int, default=0)
+    args = parser.parse_args()
+    candidates = pd.read_parquet(args.candidates)
+    candidates = candidates[candidates["cloud_cover"] <= constants.CLOUD_MAX_FRAC]
+    groups = list(candidates.groupby("tar"))
+    if args.limit_shards:
+        groups = groups[: args.limit_shards]
+    todo = [(t, g) for t, g in groups if not (args.out / "parts" / f"{t}.parquet").exists()]
+    print(f"{len(candidates)} candidates, {len(groups)} shards, {len(todo)} to do", flush=True)
+    start, done, total = time.time(), 0, 0
+    with ThreadPoolExecutor(args.shard_workers) as pool:
+        futures = [pool.submit(do_shard, str(t), g, args.out, args.sample_workers) for t, g in todo]
+        for future in futures:
             try:
-                tar, st, k = f.result()
-            except Exception:
+                tar, summary, count = future.result()
+            except Exception:  # ruff: ignore[blind-except]  (log and continue; a rerun resumes the missing shards)
                 traceback.print_exc()
                 continue
-            done += 1; n += k
-            print(f"[{done}/{len(todo)}] {tar} {st}  {n / (time.time() - t0):.1f} samples/s  {(time.time() - t0) / 60:.0f} min", flush=True)
+            done += 1
+            total += count
+            elapsed = time.time() - start
+            print(
+                f"[{done}/{len(todo)}] {tar} {summary}  {total / elapsed:.1f} samples/s"
+                f"  {elapsed / 60:.0f} min",
+                flush=True,
+            )
 
 
 if __name__ == "__main__":

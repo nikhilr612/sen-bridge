@@ -20,5 +20,57 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/sen_bridge", "src/sen_bridge_build"]
 
+[tool.ruff]
+line-length = 84
+target-version = "py310"
+src = ["src", "build", "scripts", "tests"]
+extend-exclude = ["work"]
+preview = true
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "missing-trailing-comma",  # missing trailing comma: conflicts with the formatter
+    "single-line-implicit-string-concatenation",  # implicit string concatenation on one line: conflicts with the formatter
+]
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 84  # docstrings and comments obey the same limit as code
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"  # the single docstring standard: Google style, checked by D and DOC rules
+
+[tool.ruff.lint.flake8-copyright]
+notice-rgx = "(?i)Copyright 20\\d{2} The sen-bridge authors"
+
+[tool.ruff.lint.per-file-ignores]
+"build/**" = [
+    "implicit-namespace-package",  # scripts run as `python build/x.py`, not importable packages
+    "print",  # command-line tools report progress on stdout
+]
+"scripts/**" = ["implicit-namespace-package", "print"]
+"tests/**" = [
+    "implicit-namespace-package",
+    "assert",  # pytest asserts
+    "magic-value-comparison",  # literal expected values in assertions
+    "undocumented-public-function",  # test names are the documentation
+    "missing-return-type-undocumented-public-function",  # test functions return None
+    "private-member-access",  # tests reset module caches
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ty.src]
+exclude = ["work", ".venv"]
+
+[tool.ty.environment]
+python-version = "3.10"
+extra-paths = ["build", "tests"]
+
+[tool.ty.rules]
+all = "error"

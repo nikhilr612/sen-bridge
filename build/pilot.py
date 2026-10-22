@@ -1,143 +1,175 @@
-"""Pilot / full build worker: stream samples, apply image filters, write PNGs + tables.
+# Copyright 2026 The sen-bridge authors.
+# SPDX-License-Identifier: Apache-2.0
+"""Pilot build: stream a few shards, filter, and write PNG pairs plus tables for auditing.
 
-Usage: python build/pilot.py candidates.parquet OUT_DIR --shards 20 --workers 64 [--seed 0]
+Usage::
 
-Only candidates with SSL4EO cloud_cover <= 1% are fetched (yield proxy, as in the proposal);
-the rule-based cloud test below is what decides inclusion. Nothing but the output is stored.
+    python build/pilot.py candidates.parquet OUT_DIR [--shards 20] [--workers 64] [--seed 0]
+
+Unlike ``build_full.py``, this writes images of kept crops to ``OUT_DIR/{sar,optical}`` and up to
+150 examples of each rejection reason to ``OUT_DIR/rejects/<reason>/``, which the audit tools read.
+It also writes ``pilot.parquet`` (kept rows) and ``rejects.parquet``.
 """
+
+from __future__ import annotations
+
 import argparse
-import sys
 import threading
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd
 from PIL import Image
 
-from sen_bridge_build import constants as C, filters, preprocess as P, stream
+from build_full import open_shard
+from sen_bridge_build import constants
+from sen_bridge_build.sample import MODALITIES, compute
 
-COMMIT = "97a91733db962222e1e6b40a836845ddbbb16b86"
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
+    from sen_bridge_build.stream import Remote
 
-REJECT_CAP = 150  # saved example images per rejection reason, for the audit
-_saved, _lock = {}, threading.Lock()
+    Opened = tuple[dict[str, Remote], dict[str, dict[str, tuple[int, int]]]]
 
-
-def _save(out: Path, sub: str, id_: str, sar_u8, opt_u8):
-    for name, arr in (("sar", sar_u8), ("optical", opt_u8)):
-        d = out / sub / name if sub else out / name
-        d.mkdir(parents=True, exist_ok=True)
-        Image.fromarray(arr.transpose(1, 2, 0)).save(d / f"{id_}.png")
-
-
-def compute(row, remotes, index):
-    """Fetch one location-season, apply the filters. No file I/O: returns (record, reject reason|None, sar_u8, opt_u8)."""
-    s2 = stream.Sample(remotes["S2L2A"][row.tar], *index["S2L2A"][row.tar][row.zarr])
-    s1 = stream.Sample(remotes["S1GRD"][row.tar], *index["S1GRD"][row.tar][row.zarr])
-    dem_s = stream.Sample(remotes["DEM"][row.tar], *index["DEM"][row.tar][row.zarr])
-    lulc_s = stream.Sample(remotes["LULC"][row.tar], *index["LULC"][row.tar][row.zarr])
-    bands = s2.s2_all(row.season)
-    dn = bands[[3, 2, 1]]  # B04, B03, B02
-    sar = P.sar_to_db128(s1.s1(row.season))
-    rho = P.opt_reflectance128(dn)
-    rho12 = P.opt_reflectance128(bands)
-    mask = P._center_crop(s2.cloud_mask(row.season))[::2, ::2]  # same window, nearest-neighbour to 128
-    dem = dem_s.dem()
-    lulc = P._center_crop(lulc_s.chunk("bands", f"{row.season}.0.0.0")[0, 0])[::2, ::2]
-    fl = filters.flags(sar, P._avg2(P._center_crop(dem)))
-    rec = {"id": row.id, **fl, **filters.spectral_scores(rho12), **filters.sensei_fracs(mask),
-           "rfi_score": filters.rfi_score(sar), "sat_frac": float((rho >= 1.0).mean()),
-           **filters.optical_stats(P.opt_to_uint8(rho)),
-           "border_frac": float((sar[0] < C.BORDER_DB).mean()), **filters.lulc_fracs(lulc)}
-
-    why = None
-    if filters.invalid_pixels(sar, dn) or rec["sensei_nodata_frac"] > 0:
-        why = "invalid_pixels"
-    elif filters.saturated(rho):
-        why = "saturated"
-    elif rec["sensei_cloud_frac"] >= C.CLOUD_MAX_FRAC:
-        why = "cloud_shadow"
-    elif rec["cloud_rule_frac"] >= C.CLOUD_RULE_REJECT:
-        why = "cloud_opaque"
-    elif rec["opt_white_frac"] >= C.WHITE_MAX_FRAC and rec["opt_std"] < C.WHITE_FLAT_STD:
-        why = "overexposed"
-    elif rec["opt_mean"] < C.DARK_MEAN_MIN:
-        why = "too_dark"
-    elif (rec["opt_mean"] > C.FLAT_BRIGHT_MEAN and rec["opt_std"] < C.WHITE_FLAT_STD
-          and rec["lulc_bare"] + rec["lulc_rangeland"] >= C.ARID_LULC_MIN):
-        why = "featureless_arid"
-    elif rec["water_frac_sar"] - rec["water_frac_opt"] > C.WATER_MISMATCH and rec["lulc_water"] > C.LULC_WATER_MIN:
-        why = "water_mismatch"
-    elif filters.steep(fl["slope_std"]):
-        why = "steep"
-    elif fl["elev_mean"] > C.ELEV_MAX_M:
-        why = "elevation"
-
-    return rec, why, P.sar_to_uint8(sar), P.opt_to_uint8(rho)
+#: Saved example images per rejection reason, for the audit.
+REJECT_CAP = 150
+_PROGRESS_EVERY = 200
 
 
-def process(row, remotes, index, out: Path):
-    rec, why, sar_u8, opt_u8 = compute(row, remotes, index)
-    if why is None:
-        _save(out, "", row.id, sar_u8, opt_u8)
-    else:
-        with _lock:
-            n = _saved[why] = _saved.get(why, 0) + 1
-        if n <= REJECT_CAP:
-            _save(out, f"rejects/{why}", row.id, sar_u8, opt_u8)
-    return rec, why
+def save_pair(
+    out: Path, sub: str, sample_id: str, sar: NDArray[np.uint8], opt: NDArray[np.uint8]
+) -> None:
+    """Write the radar and optical PNGs of one crop.
+
+    Args:
+        out: Pilot directory.
+        sub: Sub-directory (empty for kept crops, ``rejects/<reason>`` otherwise).
+        sample_id: Example id used as the file name.
+        sar: 8-bit radar image ``[3, 128, 128]``.
+        opt: 8-bit optical image ``[3, 128, 128]``.
+    """
+    for name, arr in (("sar", sar), ("optical", opt)):
+        directory = out / sub / name
+        directory.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(arr.transpose(1, 2, 0)).save(directory / f"{sample_id}.png")
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("candidates"); ap.add_argument("out")
-    ap.add_argument("--shards", type=int, default=20)
-    ap.add_argument("--workers", type=int, default=64)
-    ap.add_argument("--seed", type=int, default=0)
-    a = ap.parse_args()
-    out = Path(a.out)
-    for d in ("sar", "optical"):
-        (out / d).mkdir(parents=True, exist_ok=True)
+def select(path: Path, shards: int, seed: int) -> tuple[pd.DataFrame, list[str]]:
+    """Choose the candidates of a random subset of shards.
 
-    df = pd.read_parquet(a.candidates)
-    df = df[df.cloud_cover <= C.CLOUD_MAX_FRAC]
-    tars = np.random.default_rng(a.seed).permutation(sorted(df.tar.unique()))[:a.shards]
-    df = df[df.tar.isin(tars)].reset_index(drop=True)
-    print(f"{len(df)} candidates in {len(tars)} shards", flush=True)
+    Args:
+        path: Candidate table.
+        shards: Number of shards to use.
+        seed: Seed of the shard choice.
 
-    mods = ("S2L2A", "S1GRD", "DEM", "LULC")
-    remotes = {m: {t: stream.Remote(COMMIT, "train", m, t) for t in tars} for m in mods}
-    flat = [r for m in mods for r in remotes[m].values()]
-    t0 = time.time()
-    stream.prefetch_indices(flat, out / "index", workers=a.workers)
-    print(f"indexed in {time.time() - t0:.0f}s", flush=True)
-    index = {m: {t: stream.tar_index(remotes[m][t], out / "index") for t in tars} for m in mods}
-    # members are keyed by zarr file name
-    for m in mods:
-        for t in tars:
-            index[m][t] = {k.split("/")[-1]: v for k, v in index[m][t].items()}
+    Returns:
+        The candidates of the chosen shards and the shard names.
+    """
+    candidates = pd.read_parquet(path)
+    candidates = candidates[candidates["cloud_cover"] <= constants.CLOUD_MAX_FRAC]
+    tars = list(np.random.default_rng(seed).permutation(sorted(candidates["tar"].unique())))
+    chosen = [str(t) for t in tars[:shards]]
+    subset = cast("pd.DataFrame", candidates[candidates["tar"].isin(chosen)])  # stubs lose the type
+    return cast("pd.DataFrame", subset.reset_index(drop=True)), chosen
 
-    recs, rejects = [], []
-    t0 = time.time()
-    with ThreadPoolExecutor(a.workers) as ex:
-        futs = {ex.submit(process, r, remotes, index, out): r for r in df.itertuples()}
-        for i, f in enumerate(as_completed(futs), 1):
-            r = futs[f]
+
+def run_pilot(
+    candidates: pd.DataFrame,
+    opened: dict[str, Opened],
+    out: Path,
+    workers: int,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Process all candidates, saving images, and split the results into kept and rejected.
+
+    Args:
+        candidates: Candidates with ``id``, ``season``, ``zarr`` and ``tar`` columns.
+        opened: Opened shards by name.
+        out: Pilot directory.
+        workers: Number of samples processed concurrently.
+
+    Returns:
+        Records of kept crops and records (with a ``reason``) of rejected or failed ones.
+    """
+    saved: Counter[str] = Counter()
+    lock = threading.Lock()
+
+    def process(row: tuple[str, int, str, str]) -> tuple[dict[str, object], str | None]:
+        sample_id, season, zarr, tar = row
+        remotes, index = opened[tar]
+        done = compute(sample_id, season, remotes, {m: index[m][zarr] for m in MODALITIES})
+        if done.reason is None:
+            save_pair(out, "", sample_id, done.sar, done.optical)
+        else:
+            with lock:
+                saved[done.reason] += 1
+                keep = saved[done.reason] <= REJECT_CAP
+            if keep:
+                save_pair(out, f"rejects/{done.reason}", sample_id, done.sar, done.optical)
+        return dict(done.record), done.reason
+
+    rows = list(
+        zip(
+            candidates["id"],
+            candidates["season"].astype(int),
+            candidates["zarr"],
+            candidates["tar"],
+            strict=True,
+        )
+    )
+    kept: list[dict[str, object]] = []
+    rejects: list[dict[str, object]] = []
+    start = time.time()
+    with ThreadPoolExecutor(workers) as pool:
+        futures = {pool.submit(process, r): r for r in rows}
+        for i, future in enumerate(as_completed(futures), 1):
             try:
-                rec, why = f.result()
-            except Exception as e:  # keep going; record the failure
-                rec, why = {"id": r.id}, f"error:{type(e).__name__}"
-            (rejects if why else recs).append({**rec, "reason": why} if why else rec)
-            if i % 200 == 0:
-                print(f"{i}/{len(df)} kept={len(recs)} {i / (time.time() - t0):.1f}/s", flush=True)
-    keep = pd.DataFrame(recs).merge(df, on="id")
-    keep.drop(columns=["geometry"], errors="ignore").to_parquet(out / "pilot.parquet")
-    pd.DataFrame(rejects).to_parquet(out / "rejects.parquet")
-    print(pd.DataFrame(rejects).reason.value_counts().to_string() if rejects else "no rejects")
-    print(f"kept {len(keep)} of {len(df)}")
+                record, reason = future.result()
+            except Exception as exc:  # ruff: ignore[blind-except]  (keep going; the failure is recorded)
+                record, reason = {"id": futures[future][0]}, f"error:{type(exc).__name__}"
+            if reason is None:
+                kept.append(record)
+            else:
+                rejects.append({**record, "reason": reason})
+            if i % _PROGRESS_EVERY == 0:
+                rate = i / (time.time() - start)
+                print(f"{i}/{len(rows)} kept={len(kept)} {rate:.1f}/s", flush=True)
+    return kept, rejects
+
+
+def main() -> None:
+    """Run the pilot build."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("candidates", type=Path)
+    parser.add_argument("out", type=Path)
+    parser.add_argument("--shards", type=int, default=20)
+    parser.add_argument("--workers", type=int, default=64)
+    parser.add_argument("--seed", type=int, default=0)
+    args = parser.parse_args()
+    out = Path(args.out)
+
+    candidates, tars = select(Path(args.candidates), args.shards, args.seed)
+    print(f"{len(candidates)} candidates in {len(tars)} shards", flush=True)
+    start = time.time()
+    with ThreadPoolExecutor(args.workers) as pool:
+        opened = dict(
+            zip(tars, pool.map(lambda t: open_shard(t, out / "index"), tars), strict=True)
+        )
+    print(f"indexed in {time.time() - start:.0f}s", flush=True)
+
+    kept, rejects = run_pilot(candidates, opened, out, args.workers)
+    extra = candidates.drop(columns=["geometry"], errors="ignore")
+    merged = pd.DataFrame(kept).merge(extra, on="id")
+    merged.to_parquet(out / "pilot.parquet")
+    rejected = pd.DataFrame(rejects)
+    rejected.to_parquet(out / "rejects.parquet")
+    print(rejected["reason"].value_counts().to_string() if len(rejected) else "no rejects")
+    print(f"kept {len(merged)} of {len(candidates)}")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

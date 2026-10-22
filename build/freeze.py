@@ -1,19 +1,59 @@
-"""Write every filter/transform constant to docs/thresholds.json with a SHA-256 over the content.
+# Copyright 2026 The sen-bridge authors.
+# SPDX-License-Identifier: Apache-2.0
+"""Write every filter and transform constant to ``docs/thresholds.json`` with a SHA-256.
 
-Usage: python build/freeze.py   (run after the last audit round, before any model is trained)
+Run after the last audit round and before any model is trained.
+
+Usage::
+
+    python build/freeze.py
 """
+
+from __future__ import annotations
+
 import hashlib
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
-from sen_bridge_build import constants as C
+from sen_bridge_build import constants
 
-vals = {k: v for k, v in vars(C).items() if k.isupper()}
-body = json.dumps(vals, sort_keys=True, indent=2)
-out = {"constants": vals, "sha256": hashlib.sha256(body.encode()).hexdigest(),
-       "code_commit": subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip(),
-       "source_commit": "97a91733db962222e1e6b40a836845ddbbb16b86", "seed": 0}
-Path("docs").mkdir(exist_ok=True)
-Path("docs/thresholds.json").write_text(json.dumps(out, indent=2) + "\n")
-print(out["sha256"])
+#: Hugging Face commit of SSL4EO-S12 v1.1 that the build reads.
+SOURCE_COMMIT = "97a91733db962222e1e6b40a836845ddbbb16b86"
+_SEED = 0
+
+
+def git_head() -> str:
+    """Return the commit hash of the current checkout.
+
+    Returns:
+        The full hash, or an empty string if git is unavailable.
+    """
+    git = shutil.which("git")
+    if git is None:
+        return ""
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  (fixed arguments, no user input)
+        [git, "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+    )
+    return result.stdout.strip()
+
+
+def main() -> None:
+    """Write the thresholds snapshot and print its digest."""
+    values = {k: v for k, v in vars(constants).items() if k.isupper()}
+    body = json.dumps(values, sort_keys=True, indent=2)
+    snapshot = {
+        "constants": values,
+        "sha256": hashlib.sha256(body.encode()).hexdigest(),
+        "code_commit": git_head(),
+        "source_commit": SOURCE_COMMIT,
+        "seed": _SEED,
+    }
+    Path("docs").mkdir(exist_ok=True)
+    Path("docs/thresholds.json").write_text(json.dumps(snapshot, indent=2) + "\n")
+    print(snapshot["sha256"])
+
+
+if __name__ == "__main__":
+    main()
