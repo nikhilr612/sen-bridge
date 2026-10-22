@@ -97,20 +97,36 @@ class Remote:
         self._resolve()
 
     def _resolve(self) -> None:
-        """Resolve the signed CDN URL and file size.
+        """Resolve the signed CDN URL and file size, retrying with backoff.
 
         The token is sent only to the hub. The CDN URL it redirects to is
         pre-signed, and ``requests`` drops the ``Authorization`` header on the
-        cross-host redirect.
+        cross-host redirect. Transient network errors (for example a DNS lookup
+        that briefly fails) are retried like range reads are.
+
+        Raises:
+            OSError: If the hub cannot be reached after all attempts.
         """
-        response = self._session.head(
-            self._hub_url,
-            headers=self._headers,
-            allow_redirects=True,
-            timeout=_TIMEOUT_S,
-        )
-        response.raise_for_status()
-        self._url, self.size = response.url, int(response.headers["content-length"])
+        for attempt in range(_ATTEMPTS):
+            try:
+                response = self._session.head(
+                    self._hub_url,
+                    headers=self._headers,
+                    allow_redirects=True,
+                    timeout=_TIMEOUT_S,
+                )
+            except requests.RequestException:
+                time.sleep(min(2**attempt, _MAX_BACKOFF_S))
+                continue
+            if response.status_code in _RETRY_STATUS:
+                time.sleep(min(2**attempt, _MAX_BACKOFF_S))
+                continue
+            response.raise_for_status()
+            self._url = response.url
+            self.size = int(response.headers["content-length"])
+            return
+        msg = f"could not resolve {self.name}"
+        raise OSError(msg)
 
     def get(self, start: int, end: int) -> bytes:
         """Read a byte range, retrying on throttling and network errors.

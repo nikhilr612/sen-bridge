@@ -10,6 +10,7 @@ import zipfile
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pytest
 import requests
 from numcodecs import Blosc
 from typing_extensions import override
@@ -139,3 +140,55 @@ def test_no_token_means_no_authorization_header() -> None:
     session = _RecordingSession()
     stream.Remote("c", "train/S2L2A/x.tar", session=session, token="")
     assert session.sent_headers == {}
+
+
+class _FlakySession(_RecordingSession):
+    """A session whose first requests fail like a DNS outage, then succeed."""
+
+    def __init__(self, failures: int) -> None:
+        """Set how many requests fail before one succeeds.
+
+        Args:
+            failures: Number of initial failing requests.
+        """
+        super().__init__()
+        self.failures, self.calls = failures, 0
+
+    @override
+    def head(self, url: str | bytes, **kwargs: Any) -> requests.Response:
+        """Fail with a connection error for the first few calls.
+
+        Args:
+            url: Requested URL.
+            **kwargs: Request options.
+
+        Returns:
+            The canned hub response once the failures are used up.
+
+        Raises:
+            requests.ConnectionError: While failures remain.
+        """
+        self.calls += 1
+        if self.calls <= self.failures:
+            msg = "Temporary failure in name resolution"
+            raise requests.ConnectionError(msg)
+        return super().head(url, **kwargs)
+
+
+def test_resolve_retries_transient_network_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(stream.time, "sleep", lambda _s: None)  # no real waiting
+    session = _FlakySession(failures=3)
+    remote = stream.Remote("c", "train/S2L2A/x.tar", session=session, token="")
+    assert session.calls == 4
+    assert remote.size == 123
+
+
+def test_resolve_gives_up_after_all_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(stream.time, "sleep", lambda _s: None)
+    session = _FlakySession(failures=1000)
+    with pytest.raises(OSError, match="could not resolve"):
+        stream.Remote("c", "train/S2L2A/x.tar", session=session, token="")
