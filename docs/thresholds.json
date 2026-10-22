@@ -36,10 +36,14 @@
     "SAT_MAX_FRAC": 0.01,
     "WHITE_MAX_FRAC": 0.4,
     "WHITE_FLAT_STD": 0.03,
-    "DARK_MEAN_MIN": 0.08
+    "DARK_MEAN_MIN": 0.08,
+    "WATER_MISMATCH": 0.3,
+    "LULC_WATER_MIN": 0.05,
+    "BARE_SPLIT_CAP": 0.08,
+    "BARE_CROP_FRAC": 0.5
   },
-  "sha256": "c9bd2ae8b7a885fbf1794cf2fcd934957ffbe4d4fd8c020a849a46dbac265a27",
-  "code_commit": "d6d15c49ece56449b82f3845d7df2be29fe3a32f",
+  "sha256": "7b76d13814f3ff0f67ccd89691a515a8c1363cb3e75be839e82dcce9e7f9f9dc",
+  "code_commit": "d9d941a99e061bcfb70ad91ee103924114977f9c",
   "source_commit": "97a91733db962222e1e6b40a836845ddbbb16b86",
   "seed": 0
 }

@@ -45,6 +45,7 @@ def main():
     print(f"proximity check moved {n0 - (df.split != 'train').sum()} rows to train")
 
     df = splits.cap_water(df, seed=a.seed)
+    df = splits.cap_share(df, df.lulc_bare >= C.BARE_CROP_FRAC, C.BARE_SPLIT_CAP, seed=a.seed)
     out = []
     for name, g in df.groupby("split"):  # downsample within each split separately
         share = g.region.value_counts(normalize=True).to_dict()
@@ -61,7 +62,7 @@ def main():
     df["meta"] = list(meta.meta_vector(df.doy, df.lat, df.lon, df.dt_hours, desc))
     df.to_parquet(d / "final.parquet")
     print(df.split.value_counts().to_string())
-    print(df.groupby("split").water_frac_sar.apply(lambda s: (s > C.WATER_CROP_FRAC).mean()).round(3).to_string())
+    print(df.groupby("split").water_frac_opt.apply(lambda s: (s > C.WATER_CROP_FRAC).mean()).round(3).to_string())
 
 
 if __name__ == "__main__":

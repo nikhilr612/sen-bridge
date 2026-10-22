@@ -71,15 +71,20 @@ def stratified_downsample(df: pd.DataFrame, n: int, region_col="region", pre_sha
     return pd.concat(parts).sort_index()
 
 
-def cap_water(df: pd.DataFrame, cap=C.WATER_SPLIT_CAP, seed=0) -> pd.DataFrame:
-    """Within each split keep >90%-water crops at no more than `cap` of the split."""
+def cap_share(df: pd.DataFrame, member: pd.Series, cap: float, seed=0) -> pd.DataFrame:
+    """Within each split, keep rows where `member` is True at no more than `cap` of that split."""
     rng = np.random.default_rng(seed)
     keep = []
     for _, g in df.groupby("split"):
-        w = g[g.water_frac_sar > C.WATER_CROP_FRAC]
-        dry = g[g.water_frac_sar <= C.WATER_CROP_FRAC]
-        max_w = int(cap * len(dry) / (1 - cap))
-        if len(w) > max_w:
-            w = w.iloc[rng.permutation(len(w))[:max_w]]
-        keep += [dry, w]
+        m = member.loc[g.index]
+        inside, rest = g[m], g[~m]
+        max_in = int(cap * len(rest) / (1 - cap))
+        if len(inside) > max_in:
+            inside = inside.iloc[rng.permutation(len(inside))[:max_in]]
+        keep += [rest, inside]
     return pd.concat(keep).sort_index()
+
+
+def cap_water(df: pd.DataFrame, cap=C.WATER_SPLIT_CAP, seed=0, col="water_frac_opt") -> pd.DataFrame:
+    """>90% water crops, by the optical mask (radar VV misses wind-roughened sea), capped per split."""
+    return cap_share(df, df[col] > C.WATER_CROP_FRAC, cap, seed)

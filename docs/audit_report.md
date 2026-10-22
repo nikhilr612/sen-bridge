@@ -29,3 +29,10 @@ Cross-modal gradient correlation, 20 m px, random-pair control. 64% of crops gav
 Flat to moderate terrain: median shift 1 px, 83% within 1 px, no systematic offset. Slope std above 6 deg: 35-50% of crops shift by more than 3 px
 (radar not terrain-corrected). `SLOPE_STD_MAX` set to 8 deg (placeholder was 15). Steep bins hold only 14-26 crops each; cutoff is approximate.
 Resolution limit: whole-pixel shifts only.
+
+## Water, bare ground, tides (pilot4, 9,636 kept crops, LULC added)
+- LULC ships with SSL4EO (10 classes). Bare ground >=50% of a crop: 2.9% of crops, so the 8% bare cap is a no-op guard. "Rangeland" (steppe/arid fringe) is 34% of crops.
+- The featureless-bright-cream crops (mean>0.88, std<0.03) are 3% of kept crops and 98% are >=50% bare+rangeland, so aridity, not geography, drives them.
+- Radar water test (VV<-18 dB) misses wind-roughened sea: >90%-water crops are 5.1% by radar but 10.4% by the S2 mask. The water cap now uses the S2 mask.
+- Radar says water / optical says land: 6.8% of crops, but 506 of 653 are arid (dark sand), not tidal. Only 71 (0.7%) also have mapped water; they are excluded as `water_mismatch`
+  (tide or flood). Tides cannot be separated from floods without a tide model; the filter is a cheap proxy.

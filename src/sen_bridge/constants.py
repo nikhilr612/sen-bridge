@@ -29,3 +29,7 @@ WHITE_MAX_FRAC = 0.40  # share of near-white pixels (min channel > 0.85) ...
 WHITE_FLAT_STD = 0.03  # ... counted only if also featureless: bad whites std<=0.02, textured sand/snow/roofs >=0.06
 DARK_MEAN_MIN = 0.08  # mean luminance of the 8-bit optical; bad 0.03-0.064, dimmest good crop seen 0.094
 
+WATER_MISMATCH = 0.3  # radar water share minus optical water share, on crops with mapped water ...
+LULC_WATER_MIN = 0.05  # ... (tide/flood mismatch; excludes dark sand, where radar sees 'water' with no mapped water)
+BARE_SPLIT_CAP = 0.08  # share of each split allowed to be >=50% LULC bare ground (currently a no-op: ~3% of crops)
+BARE_CROP_FRAC = 0.50

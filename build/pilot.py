@@ -68,6 +68,8 @@ def process(row, remotes, index, out: Path):
         why = "border_noise"
     elif rec["rfi_score"] > C.RFI_Z:
         why = "rfi"
+    elif rec["water_frac_sar"] - rec["water_frac_opt"] > C.WATER_MISMATCH and rec["lulc_water"] > C.LULC_WATER_MIN:
+        why = "water_mismatch"
     elif filters.steep(fl["slope_std"]):
         why = "steep"
     elif fl["elev_mean"] > C.ELEV_MAX_M:

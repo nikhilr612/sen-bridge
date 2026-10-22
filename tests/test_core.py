@@ -47,3 +47,12 @@ def test_splits_and_downsample():
     assert (df.groupby("cluster_id").split.nunique() <= 2).all()
     df["region"] = rng.choice(list("ABC"), len(df), p=[.6, .3, .1])
     assert len(splits.stratified_downsample(df, 500)) == 500
+
+
+def test_cap_share_respects_cap_per_split():
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"split": rng.choice(["train", "test"], 1000), "w": rng.random(1000)})
+    out = splits.cap_share(df, df.w > 0.7, 0.10)
+    for _, g in out.groupby("split"):
+        assert (g.w > 0.7).mean() <= 0.10 + 1e-9
+    assert (out.w <= 0.7).sum() == (df.w <= 0.7).sum()  # non-members untouched
