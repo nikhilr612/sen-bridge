@@ -12,26 +12,55 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
+import requests
+from huggingface_hub import hf_hub_url
 
 REPO = "embed2scale/SSL4EO-S12-v1.1"
 PAX_SKIP = 1536  # pax header + data block + real header, read in one request
 
 
-def shard_path(commit: str, split: str, modality: str, shard: str) -> str:
-    return f"datasets/{REPO}@{commit}/{split}/{modality}/{shard}"
+class Remote:
+    """A remote file read with HTTP range requests over one resolved CDN URL.
+
+    HfFileSystem costs ~2 s per call; the resolved CDN URL costs ~0.7 s and parallelises well.
+    """
+
+    def __init__(self, commit: str, split: str, modality: str, shard: str, session=None):
+        self.name = f"{split}/{modality}/{shard}"
+        self.hub_url = hf_hub_url(REPO, self.name, repo_type="dataset", revision=commit)
+        self.s = session or requests.Session()
+        self._resolve()
+
+    def _resolve(self):
+        r = self.s.head(self.hub_url, allow_redirects=True)
+        r.raise_for_status()
+        self.url, self.size = r.url, int(r.headers["content-length"])
+
+    def get(self, start: int, end: int) -> bytes:
+        """Bytes [start, end), clipped to the file."""
+        end = min(end, self.size)
+        for attempt in range(3):
+            r = self.s.get(self.url, headers={"Range": f"bytes={start}-{end - 1}"})
+            if r.status_code in (403, 404):  # signed URL expired
+                self._resolve()
+                continue
+            r.raise_for_status()
+            return r.content
+        raise IOError(f"range read failed for {self.name}")
 
 
-def tar_index(fs, path: str, cache_dir: Path | None = None) -> dict:
+def tar_index(remote: Remote, cache_dir: Path | None = None) -> dict:
     """{member name: (data offset, size)} by walking tar headers with ranged reads."""
     cache = None
     if cache_dir:
-        cache = Path(cache_dir) / (path.replace("/", "__") + ".json")
+        cache = Path(cache_dir) / (remote.name.replace("/", "__") + ".json")
         if cache.exists():
             return {k: tuple(v) for k, v in json.loads(cache.read_text()).items()}
-    total = fs.info(path)["size"]
     out, off = {}, 0
-    while off < total:
-        blk = fs.cat_file(path, start=off, end=min(off + PAX_SKIP, total))
+    while off + 512 <= remote.size:
+        blk = remote.get(off, off + PAX_SKIP)
+        if blk[:512] == b"\0" * 512:
+            break  # end-of-archive
         ti = tarfile.TarInfo.frombuf(blk[:512], "utf-8", "strict")
         hdr = 512
         if ti.type in (tarfile.XHDTYPE, tarfile.XGLTYPE):
@@ -39,8 +68,6 @@ def tar_index(fs, path: str, cache_dir: Path | None = None) -> dict:
             ti = tarfile.TarInfo.frombuf(blk[hdr - 512:hdr], "utf-8", "strict")
         out[ti.name] = (off + hdr, ti.size)
         off += hdr + 512 * ((ti.size + 511) // 512)
-        while off < total and fs.cat_file(path, start=off, end=off + 512) == b"\0" * 512:
-            off += 512  # tar end blocks
     if cache:
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text(json.dumps(out))
@@ -48,10 +75,10 @@ def tar_index(fs, path: str, cache_dir: Path | None = None) -> dict:
 
 
 class RangeView(io.RawIOBase):
-    """Read-only window [offset, offset+size) of a remote file, with ranged reads."""
+    """Read-only window [offset, offset+size) of a Remote, so zipfile can seek in it."""
 
-    def __init__(self, fs, path, offset, size):
-        self.fs, self.path, self.base, self.size, self.pos = fs, path, offset, size, 0
+    def __init__(self, remote, offset, size):
+        self.remote, self.base, self.size, self.pos = remote, offset, size, 0
 
     def readable(self): return True
     def seekable(self): return True
@@ -65,7 +92,7 @@ class RangeView(io.RawIOBase):
         n = self.size - self.pos if n < 0 else min(n, self.size - self.pos)
         if n <= 0:
             return b""
-        b = self.fs.cat_file(self.path, start=self.base + self.pos, end=self.base + self.pos + n)
+        b = self.remote.get(self.base + self.pos, self.base + self.pos + n)
         self.pos += len(b)
         return b
 
@@ -78,8 +105,8 @@ class RangeView(io.RawIOBase):
 class Sample:
     """One sample's zarr-zip; read arrays chunk by chunk."""
 
-    def __init__(self, fs, path, offset, size):
-        self.zip = zipfile.ZipFile(RangeView(fs, path, offset, size))
+    def __init__(self, remote, offset, size):
+        self.zip = zipfile.ZipFile(RangeView(remote, offset, size))
 
     def attrs(self, name):
         return json.loads(self.zip.read(f"{name}/.zarray"))
@@ -103,6 +130,7 @@ class Sample:
         return self.chunk("bands", "0.0.0.0")[0, 0].astype(np.float32)
 
 
-def prefetch_indices(fs, paths, cache_dir, workers=16):
+def prefetch_indices(remotes, cache_dir, workers=32):
+    """Index many shards at once; each shard's header walk is serial, so parallelise across shards."""
     with ThreadPoolExecutor(workers) as ex:
-        list(ex.map(lambda p: tar_index(fs, p, cache_dir), paths))
+        list(ex.map(lambda r: tar_index(r, cache_dir), remotes))
