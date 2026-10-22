@@ -26,8 +26,9 @@ def meta_vector(
 ) -> NDArray[np.float32]:
     """Build the conditioning vector for one or many examples.
 
-    The vector is ``(sin doy, cos doy, x, y, z, dt / 48 h, orbit)`` with ``(x, y, z)`` the unit
-    vector of the location and the orbit encoded as +1 (descending) or -1 (ascending).
+    The vector is ``(sin doy, cos doy, x, y, z, dt / 48 h, orbit)`` with ``(x, y,
+    z)`` the unit vector of the location and the orbit encoded as +1 (descending) or
+    -1 (ascending).
 
     Args:
         doy: Day of year of the optical acquisition.

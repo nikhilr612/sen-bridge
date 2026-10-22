@@ -1,14 +1,16 @@
 # Copyright 2026 The sen-bridge authors.
 # SPDX-License-Identifier: Apache-2.0
-"""Pilot build: stream a few shards, filter, and write PNG pairs plus tables for auditing.
+"""Pilot build: stream a few shards, filter, write PNG pairs for auditing.
 
 Usage::
 
-    python build/pilot.py candidates.parquet OUT_DIR [--shards 20] [--workers 64] [--seed 0]
+    python build/pilot.py candidates.parquet OUT_DIR
+        [--shards 20] [--workers 64] [--seed 0]
 
-Unlike ``build_full.py``, this writes images of kept crops to ``OUT_DIR/{sar,optical}`` and up to
-150 examples of each rejection reason to ``OUT_DIR/rejects/<reason>/``, which the audit tools read.
-It also writes ``pilot.parquet`` (kept rows) and ``rejects.parquet``.
+Unlike ``build_full.py``, this writes images of kept crops to
+``OUT_DIR/{sar,optical}`` and up to 150 examples of each rejection reason to
+``OUT_DIR/rejects/<reason>/``, which the audit tools read. It also writes
+``pilot.parquet`` (kept rows) and ``rejects.parquet``.
 """
 
 from __future__ import annotations
@@ -42,7 +44,11 @@ _PROGRESS_EVERY = 200
 
 
 def save_pair(
-    out: Path, sub: str, sample_id: str, sar: NDArray[np.uint8], opt: NDArray[np.uint8]
+    out: Path,
+    sub: str,
+    sample_id: str,
+    sar: NDArray[np.uint8],
+    opt: NDArray[np.uint8],
 ) -> None:
     """Write the radar and optical PNGs of one crop.
 
@@ -72,9 +78,13 @@ def select(path: Path, shards: int, seed: int) -> tuple[pd.DataFrame, list[str]]
     """
     candidates = pd.read_parquet(path)
     candidates = candidates[candidates["cloud_cover"] <= constants.CLOUD_MAX_FRAC]
-    tars = list(np.random.default_rng(seed).permutation(sorted(candidates["tar"].unique())))
+    tars = list(
+        np.random.default_rng(seed).permutation(sorted(candidates["tar"].unique()))
+    )
     chosen = [str(t) for t in tars[:shards]]
-    subset = cast("pd.DataFrame", candidates[candidates["tar"].isin(chosen)])  # stubs lose the type
+    subset = cast(
+        "pd.DataFrame", candidates[candidates["tar"].isin(chosen)]
+    )  # stubs lose the type
     return cast("pd.DataFrame", subset.reset_index(drop=True)), chosen
 
 
@@ -84,24 +94,30 @@ def run_pilot(
     out: Path,
     workers: int,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    """Process all candidates, saving images, and split the results into kept and rejected.
+    """Process all candidates, save images, and split kept from rejected.
 
     Args:
-        candidates: Candidates with ``id``, ``season``, ``zarr`` and ``tar`` columns.
+        candidates: Candidates with ``id``, ``season``, ``zarr`` and ``tar``
+            columns.
         opened: Opened shards by name.
         out: Pilot directory.
         workers: Number of samples processed concurrently.
 
     Returns:
-        Records of kept crops and records (with a ``reason``) of rejected or failed ones.
+        Records of kept crops and records (with a ``reason``) of rejected or failed
+        ones.
     """
     saved: Counter[str] = Counter()
     lock = threading.Lock()
 
-    def process(row: tuple[str, int, str, str]) -> tuple[dict[str, object], str | None]:
+    def process(
+        row: tuple[str, int, str, str],
+    ) -> tuple[dict[str, object], str | None]:
         sample_id, season, zarr, tar = row
         remotes, index = opened[tar]
-        done = compute(sample_id, season, remotes, {m: index[m][zarr] for m in MODALITIES})
+        done = compute(
+            sample_id, season, remotes, {m: index[m][zarr] for m in MODALITIES}
+        )
         if done.reason is None:
             save_pair(out, "", sample_id, done.sar, done.optical)
         else:
@@ -109,7 +125,9 @@ def run_pilot(
                 saved[done.reason] += 1
                 keep = saved[done.reason] <= REJECT_CAP
             if keep:
-                save_pair(out, f"rejects/{done.reason}", sample_id, done.sar, done.optical)
+                save_pair(
+                    out, f"rejects/{done.reason}", sample_id, done.sar, done.optical
+                )
         return dict(done.record), done.reason
 
     rows = list(
@@ -130,7 +148,10 @@ def run_pilot(
             try:
                 record, reason = future.result()
             except Exception as exc:  # ruff: ignore[blind-except]  (keep going; the failure is recorded)
-                record, reason = {"id": futures[future][0]}, f"error:{type(exc).__name__}"
+                record, reason = (
+                    {"id": futures[future][0]},
+                    f"error:{type(exc).__name__}",
+                )
             if reason is None:
                 kept.append(record)
             else:
@@ -157,7 +178,11 @@ def main() -> None:
     start = time.time()
     with ThreadPoolExecutor(args.workers) as pool:
         opened = dict(
-            zip(tars, pool.map(lambda t: open_shard(t, out / "index"), tars), strict=True)
+            zip(
+                tars,
+                pool.map(lambda t: open_shard(t, out / "index"), tars),
+                strict=True,
+            )
         )
     print(f"indexed in {time.time() - start:.0f}s", flush=True)
 
@@ -167,7 +192,11 @@ def main() -> None:
     merged.to_parquet(out / "pilot.parquet")
     rejected = pd.DataFrame(rejects)
     rejected.to_parquet(out / "rejects.parquet")
-    print(rejected["reason"].value_counts().to_string() if len(rejected) else "no rejects")
+    print(
+        rejected["reason"].value_counts().to_string()
+        if len(rejected)
+        else "no rejects"
+    )
     print(f"kept {len(merged)} of {len(candidates)}")
 
 

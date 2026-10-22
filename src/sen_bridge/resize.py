@@ -1,9 +1,10 @@
 # Copyright 2026 The sen-bridge authors.
 # SPDX-License-Identifier: Apache-2.0
-"""The FID resize: clean-fid's "clean" mode, CPU PIL bicubic on float32 channels to 299x299.
+"""The FID resize: clean-fid's "clean" mode (PIL bicubic, float32, 299x299).
 
-Based on clean-fid (MIT, Copyright (c) 2021 Gaurav Parmar), ``cleanfid/resize.py``. Values stay
-float in [0, 255] (no re-quantisation after resizing), matching clean-fid's default.
+Based on clean-fid (MIT, Copyright (c) 2021 Gaurav Parmar), ``cleanfid/resize.py``.
+Values stay float in [0, 255] (no re-quantisation after resizing), matching
+clean-fid's default.
 """
 
 from __future__ import annotations
@@ -39,7 +40,9 @@ def clean_resize(
     for c in range(_CHANNELS):
         plane = Image.fromarray(img_u8[:, :, c].astype(np.float32), mode="F")
         resized = plane.resize((size, size), resample=Image.Resampling.BICUBIC)
-        channels.append(np.asarray(resized).clip(0, _MAX_LEVEL).reshape(size, size, 1))
+        channels.append(
+            np.asarray(resized).clip(0, _MAX_LEVEL).reshape(size, size, 1)
+        )
     return np.concatenate(channels, axis=2).astype(np.float32)
 
 

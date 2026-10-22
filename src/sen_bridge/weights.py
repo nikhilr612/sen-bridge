@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Download, verify and convert the three third-party weight sets the metrics need.
 
-Nothing is redistributed with sen-bridge: files are fetched from their original hosts on first
-use, checked against pinned SHA-256 digests, and stored as safetensors so the PyTorch and JAX
-implementations load exactly the same numbers. See NOTICE for the licence of each source.
+Nothing is redistributed with sen-bridge: files are fetched from their original
+hosts on first use, checked against pinned SHA-256 digests, and stored as
+safetensors so the PyTorch and JAX implementations load exactly the same numbers.
+See NOTICE for the licence of each source.
 
-Run ``python -m sen_bridge.weights`` to fetch and convert everything. Converting needs torch once,
-to unpickle the original ``.pth`` files.
+Run ``python -m sen_bridge.weights`` to fetch and convert everything. Converting
+needs torch once, to unpickle the original ``.pth`` files.
 """
 
 from __future__ import annotations
@@ -30,8 +31,8 @@ class Source:
     Attributes:
         url: HTTPS location of the original file.
         sha256: Pinned SHA-256 digest of the file.
-        name_prefix: First eight hex digits of the digest if the publisher encodes it in the file
-            name (the ``torch.hub`` convention), else ``None``.
+        name_prefix: First eight hex digits of the digest if the publisher encodes
+            it in the file name (the ``torch.hub`` convention), else ``None``.
     """
 
     url: str
@@ -40,8 +41,8 @@ class Source:
 
 
 SOURCES: dict[str, Source] = {
-    # FID Inception-v3: the original TensorFlow inception-2015-12-05 weights ported by pytorch-fid
-    # (Apache-2.0).
+    # FID Inception-v3: the original TensorFlow inception-2015-12-05 weights ported
+    # by pytorch-fid (Apache-2.0).
     "fid_inception": Source(
         url=(
             "https://github.com/mseitzer/pytorch-fid/releases/download/fid_weights/"
@@ -56,8 +57,9 @@ SOURCES: dict[str, Source] = {
         sha256="397923af8e79cdbb6a7127f12361acd7a2f83e06b05044ddf496e83de57a5bf0",
         name_prefix="397923af",
     ),
-    # LPIPS v0.1 linear calibration layers for the VGG trunk (BSD-2-Clause, shipped in the lpips
-    # repository). The publisher gives no digest, so this one is pinned on first download.
+    # LPIPS v0.1 linear calibration layers for the VGG trunk (BSD-2-Clause, shipped
+    # in the lpips repository). The publisher gives no digest, so this one is pinned
+    # on first download.
     "lpips_lin": Source(
         url=(
             "https://raw.githubusercontent.com/richzhang/PerceptualSimilarity/master/"
@@ -76,7 +78,9 @@ def cache_dir() -> Path:
     Returns:
         The cache directory.
     """
-    directory = Path(os.environ.get("SEN_BRIDGE_CACHE", Path.home() / ".cache" / "sen_bridge"))
+    directory = Path(
+        os.environ.get("SEN_BRIDGE_CACHE", Path.home() / ".cache" / "sen_bridge")
+    )
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
@@ -107,8 +111,8 @@ def _fetch(name: str) -> Path:
         Path of the verified raw file.
 
     Raises:
-        ValueError: If the URL is not HTTPS, or the file does not match its pinned digest (the
-            file is then removed).
+        ValueError: If the URL is not HTTPS, or the file does not match its pinned
+            digest (the file is then removed).
     """
     src = SOURCES[name]
     if not src.url.startswith(_HTTPS):
@@ -125,7 +129,10 @@ def _fetch(name: str) -> Path:
         src.name_prefix is not None and not digest.startswith(src.name_prefix)
     ):
         dst.unlink()
-        msg = f"{name}: SHA-256 {digest} does not match the pinned digest; file removed"
+        msg = (
+            f"{name}: SHA-256 {digest} does not match the pinned digest; "
+            "file removed"
+        )
         raise ValueError(msg)
     return dst
 
@@ -133,7 +140,8 @@ def _fetch(name: str) -> Path:
 def prepare() -> None:
     """Fetch, verify and convert all weights into the cache.
 
-    This is a one-off step. It imports torch to unpickle the original ``.pth`` files.
+    This is a one-off step. It imports torch to unpickle the original ``.pth``
+    files.
     """
     # torch is an optional dependency that only this one-off conversion needs.
     import torch  # ruff: ignore[import-outside-top-level]
@@ -141,16 +149,21 @@ def prepare() -> None:
 
     fid = torch.load(_fetch("fid_inception"), map_location="cpu", weights_only=True)
     save_file(
-        {k: v.contiguous() for k, v in fid.items()}, cache_dir() / "fid_inception.safetensors"
+        {k: v.contiguous() for k, v in fid.items()},
+        cache_dir() / "fid_inception.safetensors",
     )
 
     vgg = torch.load(_fetch("vgg16"), map_location="cpu", weights_only=True)
     lin = torch.load(_fetch("lpips_lin"), map_location="cpu", weights_only=True)
     prefix = "features."
     tensors = {
-        f"vgg.{k[len(prefix) :]}": v.contiguous() for k, v in vgg.items() if k.startswith(prefix)
+        f"vgg.{k[len(prefix) :]}": v.contiguous()
+        for k, v in vgg.items()
+        if k.startswith(prefix)
     }
-    tensors.update({k: v.contiguous() for k, v in lin.items()})  # lin0.model.1.weight ...
+    tensors.update({
+        k: v.contiguous() for k, v in lin.items()
+    })  # lin0.model.1.weight ...
     save_file(tensors, cache_dir() / "lpips_vgg.safetensors")
 
 

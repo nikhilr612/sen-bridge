@@ -2,21 +2,24 @@
 # SPDX-License-Identifier: Apache-2.0
 """PyTorch metrics: FID, LPIPS (VGG), PSNR, SSIM.
 
-Inputs are float images in [-1, 1], shape ``[B, 3, H, W]``. Every metric first rounds to uint8, so
-scores never depend on the float precision of the outputs.
+Inputs are float images in [-1, 1], shape ``[B, 3, H, W]``. Every metric first
+rounds to uint8, so scores never depend on the float precision of the outputs.
 
-Evaluation only: rounding to uint8 has zero gradient, so never use these metrics as a training
-loss. Values outside [-1, 1] are clipped silently (a model outputting 2.0 scores like one
-outputting 1.0), so check your output range. Rounding is idempotent on 8-bit images
-(``u / 127.5 - 1`` maps back to the same ``u``), and 0.0 falls on a rounding tie and becomes about
-+0.004; both are inherent to the 8-bit encoding and identical in the two backends.
+Evaluation only: rounding to uint8 has zero gradient, so never use these metrics as
+a training loss. Values outside [-1, 1] are clipped silently (a model outputting 2.0
+scores like one outputting 1.0), so check your output range. Rounding is idempotent
+on 8-bit images (``u / 127.5 - 1`` maps back to the same ``u``), and 0.0 falls on a
+rounding tie and becomes about +0.004; both are inherent to the 8-bit encoding. The
+uint8 levels are identical in the two backends (the float values can differ by one
+ulp).
 
-Frozen settings (none are arguments): FID uses the pytorch-fid Inception-v3 weights with clean-fid
-CPU bicubic resize to 299x299; LPIPS uses the VGG16 trunk with the v0.1 linear layers; SSIM uses an
-11x11 Gaussian, sigma 1.5, data range 1.
+Frozen settings (none are arguments): FID uses the pytorch-fid Inception-v3 weights
+with clean-fid CPU bicubic resize to 299x299; LPIPS uses the VGG16 trunk with the
+v0.1 linear layers; SSIM uses an 11x11 Gaussian, sigma 1.5, data range 1.
 
-The FID Inception block variants below are vendored from pytorch-fid (Apache-2.0, Copyright
-Maximilian Seitzer), see NOTICE. LPIPS follows richzhang/PerceptualSimilarity (BSD-2-Clause).
+The FID Inception block variants below are vendored from pytorch-fid (Apache-2.0,
+Copyright Maximilian Seitzer), see NOTICE. LPIPS follows
+richzhang/PerceptualSimilarity (BSD-2-Clause).
 """
 
 from __future__ import annotations
@@ -40,7 +43,12 @@ from torchvision.models.inception import (
 from typing_extensions import override
 
 from sen_bridge import weights
-from sen_bridge.fid_core import feature_stats, frechet_distance, load_stats, save_stats
+from sen_bridge.fid_core import (
+    feature_stats,
+    frechet_distance,
+    load_stats,
+    save_stats,
+)
 from sen_bridge.resize import resize_batch
 
 if TYPE_CHECKING:
@@ -63,7 +71,8 @@ _POOL_STRIDE = 2
 def _call(module: nn.Module, *args: torch.Tensor) -> torch.Tensor:
     """Call a module and narrow the result to a tensor.
 
-    ``nn.Module.__call__`` is typed as returning ``Any``; every network here returns a tensor.
+    ``nn.Module.__call__`` is typed as returning ``Any``; every network here returns
+    a tensor.
 
     Args:
         module: The module to call.
@@ -76,7 +85,7 @@ def _call(module: nn.Module, *args: torch.Tensor) -> torch.Tensor:
 
 
 def _unit_norm(feats: torch.Tensor) -> torch.Tensor:
-    """Scale each spatial feature vector to unit length across channels, as LPIPS does.
+    """Scale each feature vector to unit length across channels, as LPIPS does.
 
     Args:
         feats: Feature map ``[B, C, H, W]``.
@@ -94,7 +103,8 @@ def quantise(x: torch.Tensor) -> torch.Tensor:
         x: Images in [-1, 1]; values outside are clipped.
 
     Returns:
-        Float images in [0, 1] on the 256 uint8 levels. The result has zero gradient.
+        Float images in [0, 1] on the 256 uint8 levels. The result has zero
+        gradient.
     """
     return torch.round((x.clamp(-1, 1) + 1) * _HALF_RANGE) / _MAX_LEVEL
 
@@ -114,7 +124,7 @@ def psnr(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 
 def ssim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    """Compute the structural similarity with an 11x11 Gaussian window, sigma 1.5, data range 1.
+    """Compute SSIM with an 11x11 Gaussian window, sigma 1.5, data range 1.
 
     The score is the mean over the valid region (no padding) and the three channels.
 
@@ -127,10 +137,15 @@ def ssim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     """
     x, y = quantise(x), quantise(y)
     channels = x.shape[1]
-    offsets = torch.arange(_SSIM_WINDOW, dtype=torch.float32, device=x.device) - _SSIM_WINDOW // 2
+    offsets = (
+        torch.arange(_SSIM_WINDOW, dtype=torch.float32, device=x.device)
+        - _SSIM_WINDOW // 2
+    )
     gauss = torch.exp(-(offsets**2) / (2 * _SSIM_SIGMA**2))
     gauss /= gauss.sum()
-    window = (gauss[:, None] * gauss[None, :]).expand(channels, 1, -1, -1).contiguous()
+    window = (
+        (gauss[:, None] * gauss[None, :]).expand(channels, 1, -1, -1).contiguous()
+    )
 
     def blur(a: torch.Tensor) -> torch.Tensor:
         return torch_f.conv2d(a, window, groups=channels)
@@ -138,7 +153,9 @@ def ssim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     mx, my = blur(x), blur(y)
     sxx, syy, sxy = blur(x * x) - mx**2, blur(y * y) - my**2, blur(x * y) - mx * my
     c1, c2 = _SSIM_K1**2, _SSIM_K2**2
-    score = ((2 * mx * my + c1) * (2 * sxy + c2)) / ((mx**2 + my**2 + c1) * (sxx + syy + c2))
+    score = ((2 * mx * my + c1) * (2 * sxy + c2)) / (
+        (mx**2 + my**2 + c1) * (sxx + syy + c2)
+    )
     return score.flatten(1).mean(1)
 
 
@@ -147,7 +164,8 @@ class _LPIPS(nn.Module):
 
     SHIFT = (-0.030, -0.088, -0.188)
     SCALE = (0.458, 0.448, 0.450)
-    #: Indices in ``vgg16().features`` of relu1_2, relu2_2, relu3_3, relu4_3 and relu5_3.
+    #: Indices in ``vgg16().features`` of relu1_2, relu2_2, relu3_3, relu4_3 and
+    #: relu5_3.
     TAPS = (3, 8, 15, 22, 29)
     CHANNELS = (64, 128, 256, 512, 512)
     #: Number of leading ``vgg16().features`` layers up to and including relu5_3.
@@ -201,7 +219,9 @@ class _LPIPS(nn.Module):
             Distance for each pair, shape ``[B]``.
         """
         total = torch.zeros(x.shape[0], device=x.device)
-        for fx, fy, lin in zip(self._feats(x), self._feats(y), self.lins, strict=True):
+        for fx, fy, lin in zip(
+            self._feats(x), self._feats(y), self.lins, strict=True
+        ):
             diff = (_unit_norm(fx) - _unit_norm(fy)) ** 2
             total += _call(lin, diff).mean((2, 3)).flatten()
         return total
@@ -227,12 +247,15 @@ def lpips(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     def to_model_range(t: torch.Tensor) -> torch.Tensor:
         return quantise(t) * 2 - 1
 
-    with torch.no_grad(), torch.backends.cudnn.flags(enabled=True, allow_tf32=False):
+    with (
+        torch.no_grad(),
+        torch.backends.cudnn.flags(enabled=True, allow_tf32=False),
+    ):
         return _call(net, to_model_range(x), to_model_range(y))
 
 
 class _FIDInceptionA(InceptionA):
-    """Inception-A whose average pool excludes padding, as in the TensorFlow graph."""
+    """Inception-A with a padding-excluding average pool, as in TensorFlow."""
 
     @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -248,13 +271,15 @@ class _FIDInceptionA(InceptionA):
             self.branch1x1(x),
             self.branch5x5_2(self.branch5x5_1(x)),
             self.branch3x3dbl_3(self.branch3x3dbl_2(self.branch3x3dbl_1(x))),
-            self.branch_pool(torch_f.avg_pool2d(x, 3, 1, 1, count_include_pad=False)),
+            self.branch_pool(
+                torch_f.avg_pool2d(x, 3, 1, 1, count_include_pad=False)
+            ),
         ]
         return torch.cat(branches, 1)
 
 
 class _FIDInceptionC(InceptionC):
-    """Inception-C whose average pool excludes padding, as in the TensorFlow graph."""
+    """Inception-C with a padding-excluding average pool, as in TensorFlow."""
 
     @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -275,15 +300,17 @@ class _FIDInceptionC(InceptionC):
             self.branch7x7dbl_5,
         ):
             dbl = layer(dbl)
-        pool = self.branch_pool(torch_f.avg_pool2d(x, 3, 1, 1, count_include_pad=False))
+        pool = self.branch_pool(
+            torch_f.avg_pool2d(x, 3, 1, 1, count_include_pad=False)
+        )
         return torch.cat([self.branch1x1(x), b7, dbl, pool], 1)
 
 
 class _FIDInceptionE(InceptionE):
     """Inception-E with the pooling variant used by the FID graph.
 
-    The last block of the FID Inception uses max pooling, an artefact of the original TensorFlow
-    graph.
+    The last block of the FID Inception uses max pooling, an artefact of the
+    original TensorFlow graph.
     """
 
     def __init__(self, in_channels: int, pool: Literal["avg", "max"]) -> None:
@@ -359,8 +386,12 @@ class _FIDInception(nn.Module):
         """
         for stem in (self.Conv2d_1a_3x3, self.Conv2d_2a_3x3, self.Conv2d_2b_3x3):
             x = _call(stem, x)
-        x = _call(self.Conv2d_3b_1x1, torch_f.max_pool2d(x, _POOL_KERNEL, _POOL_STRIDE))
-        x = torch_f.max_pool2d(_call(self.Conv2d_4a_3x3, x), _POOL_KERNEL, _POOL_STRIDE)
+        x = _call(
+            self.Conv2d_3b_1x1, torch_f.max_pool2d(x, _POOL_KERNEL, _POOL_STRIDE)
+        )
+        x = torch_f.max_pool2d(
+            _call(self.Conv2d_4a_3x3, x), _POOL_KERNEL, _POOL_STRIDE
+        )
         for block in (
             self.Mixed_5b,
             self.Mixed_5c,
@@ -381,8 +412,9 @@ class _FIDInception(nn.Module):
 class FID:
     """Accumulator over real and generated images.
 
-    Call :meth:`update` with batches of each kind, then :meth:`compute`. Real statistics can be
-    loaded from a file with :meth:`from_stats` instead of featurising the real images.
+    Call :meth:`update` with batches of each kind, then :meth:`compute`. Real
+    statistics can be loaded from a file with :meth:`from_stats` instead of
+    featurising the real images.
 
     Attributes:
         device: Device that runs the Inception network.
@@ -392,16 +424,23 @@ class FID:
         """Create an empty accumulator.
 
         Args:
-            device: Device for the Inception network. Defaults to CUDA if available, else CPU.
+            device: Device for the Inception network. Defaults to CUDA if available,
+                else CPU.
         """
-        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self.device = torch.device(
+            device or ("cuda" if torch.cuda.is_available() else "cpu")
+        )
         self._net: _FIDInception | None = None
-        self._real_stats: tuple[NDArray[np.float64], NDArray[np.float64]] | None = None
+        self._real_stats: tuple[NDArray[np.float64], NDArray[np.float64]] | None = (
+            None
+        )
         self._real: list[NDArray[np.float64]] = []
         self._fake: list[NDArray[np.float64]] = []
 
     @classmethod
-    def from_stats(cls, path: Path | str, device: str | torch.device | None = None) -> FID:
+    def from_stats(
+        cls, path: Path | str, device: str | torch.device | None = None
+    ) -> FID:
         """Create an accumulator whose real statistics come from a file.
 
         Args:
@@ -422,8 +461,8 @@ class FID:
     def features(self, images: torch.Tensor) -> NDArray[np.float64]:
         """Compute Inception features.
 
-        Images are rounded to uint8, resized on the CPU with clean-fid's bicubic filter, then run
-        through the network on :attr:`device`.
+        Images are rounded to uint8, resized on the CPU with clean-fid's bicubic
+        filter, then run through the network on :attr:`device`.
 
         Args:
             images: Images in [-1, 1], shape ``[B, 3, H, W]``.
@@ -435,8 +474,15 @@ class FID:
             self._net = _FIDInception().to(self.device)
         u8 = torch.round((images.clamp(-1, 1) + 1) * _HALF_RANGE).to(torch.uint8)
         resized = resize_batch(u8.permute(0, 2, 3, 1).cpu().numpy())
-        x = torch.from_numpy(resized).to(self.device).permute(0, 3, 1, 2) / _HALF_RANGE - 1.0
-        with torch.no_grad(), torch.backends.cudnn.flags(enabled=True, allow_tf32=False):
+        x = (
+            torch.from_numpy(resized).to(self.device).permute(0, 3, 1, 2)
+            / _HALF_RANGE
+            - 1.0
+        )
+        with (
+            torch.no_grad(),
+            torch.backends.cudnn.flags(enabled=True, allow_tf32=False),
+        ):
             return _call(self._net, x).double().cpu().numpy()
 
     def update(self, images: torch.Tensor, *, real: bool) -> None:
@@ -444,15 +490,19 @@ class FID:
 
         Args:
             images: Images in [-1, 1], shape ``[B, 3, H, W]``.
-            real: Whether the images are real targets (``True``) or generated (``False``).
+            real: Whether the images are real targets (``True``) or generated
+                (``False``).
         """
         (self._real if real else self._fake).append(self.features(images))
 
-    def stats(self, *, real: bool) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    def stats(
+        self, *, real: bool
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         """Compute the mean and covariance of accumulated features.
 
         Args:
-            real: Use the real features (``True``) or the generated ones (``False``).
+            real: Use the real features (``True``) or the generated ones
+                (``False``).
 
         Returns:
             The feature mean ``[2048]`` and covariance ``[2048, 2048]``.
@@ -464,7 +514,8 @@ class FID:
 
         Args:
             path: Destination file.
-            real: Save the real statistics (``True``) or the generated ones (``False``).
+            real: Save the real statistics (``True``) or the generated ones
+                (``False``).
         """
         save_stats(path, *self.stats(real=real))
 

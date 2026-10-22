@@ -1,6 +1,6 @@
 # Copyright 2026 The sen-bridge authors.
 # SPDX-License-Identifier: Apache-2.0
-"""Process one location-season: fetch the arrays, compute the scores and apply the filters."""
+"""Process one location-season: fetch, score and filter."""
 
 from __future__ import annotations
 
@@ -21,7 +21,8 @@ if TYPE_CHECKING:
 MODALITIES = ("S2L2A", "S1GRD", "DEM", "LULC")
 #: Indices of B04, B03 and B02 in the 12-band L2A stack.
 _RGB_BANDS = [3, 2, 1]
-#: Mask pixels per 128-pixel crop pixel: the 256-pixel centre crop is subsampled by two.
+#: Mask pixels per 128-pixel crop pixel: the 256-pixel centre crop is subsampled by
+#: two.
 _MASK_STEP = 2
 _FULL_REFLECTANCE = 1.0
 
@@ -37,9 +38,11 @@ class Record(
 
     Attributes:
         id: Example id, ``<sample id>_<season>``.
-        rfi_score: Largest robust z-score of a radar row or column mean. Recorded, never a filter.
+        rfi_score: Largest robust z-score of a radar row or column mean. Recorded,
+            never a filter.
         sat_frac: Share of optical pixels with reflectance of at least 1.0.
-        border_frac: Share of pixels with radar VV below the border-noise level. Recorded only.
+        border_frac: Share of pixels with radar VV below the border-noise level.
+            Recorded only.
     """
 
     id: str
@@ -53,7 +56,8 @@ class Computed(NamedTuple):
 
     Attributes:
         record: All scores and flags.
-        reason: Name of the first filter that rejects the crop, or ``None`` if it is kept.
+        reason: Name of the first filter that rejects the crop, or ``None`` if it is
+            kept.
         sar: 8-bit radar image ``[3, 128, 128]``.
         optical: 8-bit optical image ``[3, 128, 128]``.
     """
@@ -67,7 +71,8 @@ class Computed(NamedTuple):
 def reject_reason(rec: Record, *, invalid: bool) -> str | None:
     """Find the first filter that rejects a crop.
 
-    The order is part of the specification: a crop is reported under the first rule it breaks.
+    The order is part of the specification: a crop is reported under the first rule
+    it breaks.
 
     Args:
         rec: The crop's scores and flags.
@@ -84,7 +89,10 @@ def reject_reason(rec: Record, *, invalid: bool) -> str | None:
         ("saturated", rec["sat_frac"] > constants.SAT_MAX_FRAC),
         ("cloud_shadow", rec["sensei_cloud_frac"] >= constants.CLOUD_MAX_FRAC),
         ("cloud_opaque", rec["cloud_rule_frac"] >= constants.CLOUD_RULE_REJECT),
-        ("overexposed", rec["opt_white_frac"] >= constants.WHITE_MAX_FRAC and featureless),
+        (
+            "overexposed",
+            rec["opt_white_frac"] >= constants.WHITE_MAX_FRAC and featureless,
+        ),
         ("too_dark", rec["opt_mean"] < constants.DARK_MEAN_MIN),
         (
             "featureless_arid",
@@ -92,7 +100,8 @@ def reject_reason(rec: Record, *, invalid: bool) -> str | None:
         ),
         (
             "water_mismatch",
-            water_gap > constants.WATER_MISMATCH and rec["lulc_water"] > constants.LULC_WATER_MIN,
+            water_gap > constants.WATER_MISMATCH
+            and rec["lulc_water"] > constants.LULC_WATER_MIN,
         ),
         ("steep", filters.steep(rec["slope_std"])),
         ("elevation", rec["elev_mean"] > constants.ELEV_MAX_M),
@@ -132,7 +141,8 @@ def _load(
     Args:
         season: Season index 0 to 3.
         remotes: The tar shard of each modality.
-        members: ``(offset, size)`` of this sample's zip inside each modality's shard.
+        members: ``(offset, size)`` of this sample's zip inside each modality's
+            shard.
 
     Returns:
         The cropped arrays.
@@ -147,7 +157,9 @@ def _load(
         digital=bands[_RGB_BANDS],
         rho=preprocess.opt_reflectance128(bands[_RGB_BANDS]),
         rho12=preprocess.opt_reflectance128(bands),
-        mask=preprocess.center_crop(s2.cloud_mask(season))[::_MASK_STEP, ::_MASK_STEP],
+        mask=preprocess.center_crop(s2.cloud_mask(season))[
+            ::_MASK_STEP, ::_MASK_STEP
+        ],
         dem=preprocess.avg_2x2(preprocess.center_crop(dem_sample.dem())),
         lulc=preprocess.center_crop(lulc)[::_MASK_STEP, ::_MASK_STEP],
     )
@@ -165,10 +177,12 @@ def compute(
         sample_id: Example id, ``<sample id>_<season>``.
         season: Season index 0 to 3.
         remotes: The tar shard of each modality in :data:`MODALITIES`.
-        members: ``(offset, size)`` of this sample's zip inside each modality's shard.
+        members: ``(offset, size)`` of this sample's zip inside each modality's
+            shard.
 
     Returns:
-        The record, the rejection reason (``None`` if kept) and the two 8-bit images.
+        The record, the rejection reason (``None`` if kept) and the two 8-bit
+        images.
     """
     a = _load(season, remotes, members)
     sar_u8, opt_u8 = preprocess.sar_to_uint8(a.sar), preprocess.opt_to_uint8(a.rho)

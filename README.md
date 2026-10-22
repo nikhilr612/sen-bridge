@@ -16,18 +16,28 @@ Inputs are float images in **[-1, 1]**, 3 channels, 128x128. `sen_bridge.torch` 
 Every metric first rounds to uint8, so scores never depend on the float precision of your outputs.
 
 ```python
-from sen_bridge import torch as sb               # x, y: [B, 3, H, W]
-sb.psnr(x, y), sb.ssim(x, y), sb.lpips(x, y)     # each -> [B] (one value per image: average, bootstrap or slice them yourself)
+from sen_bridge import torch as sb  # x, y: [B, 3, H, W]
 
-fid = sb.FID.from_stats("stats/fid_test.npz")    # real statistics ship with the dataset
-fid.update(generated, real=False)                # batches; resized on the CPU
+(
+    sb.psnr(x, y),
+    sb.ssim(x, y),
+    sb.lpips(x, y),
+)  # each -> [B] (one value per image: average, bootstrap or slice them yourself)
+
+fid = sb.FID.from_stats(
+    "stats/fid_test.npz"
+)  # real statistics ship with the dataset
+fid.update(generated, real=False)  # batches; resized on the CPU
 score = fid.compute()
 ```
 
 ```python
-from sen_bridge import jax as sb                 # single image [H, W, C]; batch with jit + vmap
-psnr = jax.jit(jax.vmap(sb.psnr))(x, y)          # likewise ssim, lpips
-fid = sb.FID(); fid.update(images_nhwc, real=True); ...
+from sen_bridge import jax as sb  # single image [H, W, C]; batch with jit + vmap
+
+psnr = jax.jit(jax.vmap(sb.psnr))(x, y)  # likewise ssim, lpips
+fid = sb.FID()
+fid.update(images_nhwc, real=True)
+...
 ```
 
 Frozen settings (none are arguments): FID uses the pytorch-fid Inception-v3 weights and clean-fid's CPU bicubic resize to 299x299;
@@ -50,6 +60,22 @@ per-image PSNR/SSIM/LPIPS with 95% bootstrap intervals resampled by geographic c
 Code: Apache-2.0 (see `LICENSE`, `NOTICE`, `licenses/`). Weights are **not** redistributed; they come from their original hosts and are
 SHA-256 checked. The FID and LPIPS-linear weights are Apache-2.0 and BSD-2-Clause. The VGG16 trunk has no published weights licence;
 see `docs/LICENSES.md` before commercial use.
+
+## Development standards
+
+One fixed standard, enforced by the tools rather than by convention:
+
+- **Formatting:** `ruff format`, 84 columns. `ruff format --check` must pass.
+- **Lint:** `ruff check` with `select = ["ALL"]` and preview rules. Only two rules are
+  disabled, both because they conflict with the formatter; per-file exceptions
+  (`assert` in tests, `print` in command-line scripts) are written down in
+  `pyproject.toml`. Docstrings and comments obey the same 84-column limit.
+- **Documentation:** Google-style docstrings on every module, class, function and
+  method, checked by the `D` (pydocstyle, `convention = "google"`) and `DOC`
+  (pydoclint) rules, so `Args`, `Returns`, `Raises` and `Attributes` must match the
+  code.
+- **Types:** `ty check` with every rule set to `error`; all code is fully annotated.
+- **All at once:** `./check.sh` (also available as a pre-commit config).
 
 ## Layout
 

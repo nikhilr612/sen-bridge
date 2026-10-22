@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Quality filters and per-crop scores.
 
-Every filter uses only information available at prediction time (radar, metadata, DEM, static
-maps) or removes ground truth that is invalid; nothing removes a valid but hard target by looking
-at it. Scores that did not earn a place as filters (radio-frequency interference, radar border
-noise, haze, snow) are recorded but never used to select examples.
+Every filter uses only information available at prediction time (radar, metadata,
+DEM, static maps) or removes ground truth that is invalid; nothing removes a valid
+but hard target by looking at it. Scores that did not earn a place as filters
+(radio-frequency interference, radar border noise, haze, snow) are recorded but
+never used to select examples.
 """
 
 from __future__ import annotations
@@ -30,7 +31,8 @@ _RFI_MIN_OFFSET_DB = 3.0
 _MAD_TO_SIGMA = 1.4826
 _EPS = 1e-6
 
-# Indices into the 12-band L2A stack (B01, B02, B03, B04, B05, B06, B07, B08, B8A, B09, B11, B12).
+# Indices into the 12-band L2A stack (B01, B02, B03, B04, B05, B06, B07, B08, B8A,
+# B09, B11, B12).
 _B01, _B02, _B03, _B04, _B11 = 0, 1, 2, 3, 10
 _NDSI_SNOW = 0.4
 _GREEN_SNOW = 0.3
@@ -44,7 +46,8 @@ SENSEI_NODATA = 6
 _SENSEI_WATER = 1
 _SENSEI_SNOW = 2
 
-#: Classes of SSL4EO's land-cover layer by code (code 8, clouds, and 0, no data, are not recorded).
+#: Classes of SSL4EO's land-cover layer by code (code 8, clouds, and 0, no data, are
+#: not recorded).
 LULC_CLASSES = {
     1: "water",
     2: "trees",
@@ -64,8 +67,8 @@ class OpticalStats(TypedDict):
         opt_mean: Mean luminance in [0, 1].
         opt_std: Standard deviation of the luminance.
         opt_white_frac: Share of near-white pixels (minimum channel above 0.85).
-        flat_bright: Featureless and bright. Analysis only: it also fires on sand desert, a valid
-            target, so it must never select examples.
+        flat_bright: Featureless and bright. Analysis only: it also fires on sand
+            desert, a valid target, so it must never select examples.
     """
 
     opt_mean: float
@@ -94,11 +97,12 @@ class SpectralScores(TypedDict):
     """Spectral scores from the 12-band reflectance crop.
 
     Attributes:
-        cloud_rule_frac: Share of bright, flat-spectrum pixels that are not snow. It also fires on
-            roofs and pale sand, so it is a score, not a filter, except for near-total cover.
+        cloud_rule_frac: Share of bright, flat-spectrum pixels that are not snow. It
+            also fires on roofs and pale sand, so it is a score, not a filter,
+            except for near-total cover.
         snow_score: Share of bright green pixels with NDSI above 0.4.
-        haze_score: Mean B01 over mean B02 reflectance; aerosol and thin cloud lift the coastal
-            band.
+        haze_score: Mean B01 over mean B02 reflectance; aerosol and thin cloud lift
+            the coastal band.
     """
 
     cloud_rule_frac: float
@@ -152,13 +156,14 @@ def metadata_ok(
     month: ArrayLike,
     elev: ArrayLike | None = None,
 ) -> NDArray[np.bool_]:
-    """Apply the metadata-only filters: time gap, local winter at high latitude, optional elevation.
+    """Apply the metadata filters: time gap, local winter, optional elevation.
 
     Args:
         dt_hours: Optical minus radar acquisition time, in hours.
         lat: Latitude in degrees.
         month: Month of the optical acquisition, 1 to 12.
-        elev: Elevation in metres. If given, crops above the elevation limit are rejected.
+        elev: Elevation in metres. If given, crops above the elevation limit are
+            rejected.
 
     Returns:
         Boolean array, true where the example passes.
@@ -173,7 +178,9 @@ def metadata_ok(
     return ok
 
 
-def invalid_pixels(sar_db: NDArray[np.floating], opt_dn: NDArray[np.number]) -> bool:
+def invalid_pixels(
+    sar_db: NDArray[np.floating], opt_dn: NDArray[np.number]
+) -> bool:
     """Detect NaN or no-data pixels in either modality.
 
     Args:
@@ -181,11 +188,13 @@ def invalid_pixels(sar_db: NDArray[np.floating], opt_dn: NDArray[np.number]) -> 
         opt_dn: Optical digital numbers.
 
     Returns:
-        True if any radar value is not finite, any optical value is not finite, or any optical
-        value is zero.
+        True if any radar value is not finite, any optical value is not finite, or
+        any optical value is zero.
     """
     return bool(
-        not np.isfinite(sar_db).all() or not np.isfinite(opt_dn).all() or (opt_dn == 0).any()
+        not np.isfinite(sar_db).all()
+        or not np.isfinite(opt_dn).all()
+        or (opt_dn == 0).any()
     )
 
 
@@ -196,7 +205,8 @@ def saturated(opt_rho: NDArray[np.floating]) -> bool:
         opt_rho: Optical reflectance.
 
     Returns:
-        True if more than the allowed share of pixels have reflectance of at least 1.0.
+        True if more than the allowed share of pixels have reflectance of at least
+        1.0.
     """
     return bool((opt_rho >= 1.0).mean() > constants.SAT_MAX_FRAC)
 
@@ -208,7 +218,8 @@ def optical_stats(opt_u8: NDArray[np.uint8]) -> OpticalStats:
         opt_u8: 8-bit optical image, shape ``[3, H, W]``.
 
     Returns:
-        Mean, standard deviation, near-white share and the analysis-only flat-bright flag.
+        Mean, standard deviation, near-white share and the analysis-only flat-bright
+        flag.
     """
     unit = opt_u8.astype(np.float32) / _MAX_LEVEL
     lum, min_channel = unit.mean(0), unit.min(0)
@@ -216,7 +227,9 @@ def optical_stats(opt_u8: NDArray[np.uint8]) -> OpticalStats:
         "opt_mean": float(lum.mean()),
         "opt_std": float(lum.std()),
         "opt_white_frac": float((min_channel > _WHITE_LEVEL).mean()),
-        "flat_bright": bool(lum.std() < _FLAT_STD and min_channel.mean() > _FLAT_MIN_CHANNEL),
+        "flat_bright": bool(
+            lum.std() < _FLAT_STD and min_channel.mean() > _FLAT_MIN_CHANNEL
+        ),
     }
 
 
@@ -227,8 +240,9 @@ def rfi_score(sar_db: NDArray[np.floating]) -> float:
         sar_db: Radar VV and VH in dB, shape ``[2, H, W]``.
 
     Returns:
-        The largest robust z-score of a row or column mean over both polarisations. Only streaks
-        that deviate by more than 3 dB count; 0.0 if there is none. Recorded, never a filter.
+        The largest robust z-score of a row or column mean over both polarisations.
+        Only streaks that deviate by more than 3 dB count; 0.0 if there is none.
+        Recorded, never a filter.
     """
     worst = 0.0
     for channel in sar_db:
@@ -274,7 +288,7 @@ def steep(slope_std: float) -> bool:
 
 
 def spectral_scores(rho12: NDArray[np.floating]) -> SpectralScores:
-    """Compute spectral cloud, snow and haze scores from the 12-band reflectance crop.
+    """Compute spectral cloud, snow and haze scores from the 12-band crop.
 
     Args:
         rho12: Reflectance, shape ``[12, H, W]``.
@@ -286,7 +300,12 @@ def spectral_scores(rho12: NDArray[np.floating]) -> SpectralScores:
     ndsi = (green - swir) / np.maximum(green + swir, _EPS)
     blue, red = rho12[_B02], rho12[_B04]
     snow = (ndsi > _NDSI_SNOW) & (green > _GREEN_SNOW)
-    cloud = (blue > _BRIGHT) & (red > _BRIGHT) & (np.abs(red - blue) < _WHITE_BALANCE) & ~snow
+    cloud = (
+        (blue > _BRIGHT)
+        & (red > _BRIGHT)
+        & (np.abs(red - blue) < _WHITE_BALANCE)
+        & ~snow
+    )
     return {
         "cloud_rule_frac": float(cloud.mean()),
         "snow_score": float(snow.mean()),
@@ -295,7 +314,9 @@ def spectral_scores(rho12: NDArray[np.floating]) -> SpectralScores:
 
 
 def sensei_fracs(mask: NDArray[np.uint8]) -> SenseiFracs:
-    """Compute class shares of SSL4EO's neural mask. Used for filtering only, never for pairing.
+    """Compute class shares of SSL4EO's neural mask.
+
+    Used for filtering only, never for pairing.
 
     Args:
         mask: Mask classes on the 128x128 crop.
@@ -312,7 +333,9 @@ def sensei_fracs(mask: NDArray[np.uint8]) -> SenseiFracs:
 
 
 def lulc_fracs(lulc: NDArray[np.uint8]) -> LulcFracs:
-    """Compute class shares of SSL4EO's land-cover layer. A static map, so usable for selection.
+    """Compute class shares of SSL4EO's land-cover layer.
+
+    A static map, so it is usable for selection.
 
     Args:
         lulc: Land-cover codes on the 128x128 crop.

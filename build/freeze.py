@@ -1,8 +1,9 @@
 # Copyright 2026 The sen-bridge authors.
 # SPDX-License-Identifier: Apache-2.0
-"""Write every filter and transform constant to ``docs/thresholds.json`` with a SHA-256.
+"""Write every filter and transform constant to ``docs/thresholds.json``.
 
-Run after the last audit round and before any model is trained.
+The snapshot carries a SHA-256 of the constants. Run it after the last audit
+round and before any model is trained.
 
 Usage::
 
@@ -14,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-import subprocess
+import subprocess  # ruff: ignore[suspicious-subprocess-import]  (fixed git call)
 from pathlib import Path
 
 from sen_bridge_build import constants
@@ -51,7 +52,9 @@ def main() -> None:
         "seed": _SEED,
     }
     Path("docs").mkdir(exist_ok=True)
-    Path("docs/thresholds.json").write_text(json.dumps(snapshot, indent=2) + "\n")
+    Path("docs/thresholds.json").write_text(
+        json.dumps(snapshot, indent=2) + "\n", encoding="utf-8"
+    )
     print(snapshot["sha256"])
 
 

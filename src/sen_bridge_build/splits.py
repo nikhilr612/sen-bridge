@@ -1,6 +1,6 @@
 # Copyright 2026 The sen-bridge authors.
 # SPDX-License-Identifier: Apache-2.0
-"""Geographic splits, the 5 km leakage check, caps and region-stratified downsampling."""
+"""Geographic splits, the 5 km leakage check, caps and downsampling."""
 
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ _DEFAULT_FRACTIONS = (0.835, 0.033, 0.132)
 #: Margin above its pre-filter share that a region may take in the downsample.
 _REGION_SLACK = 0.03
 
-#: Coarse region boxes as (name, lat_min, lat_max, lon_min, lon_max). The first match wins.
+#: Coarse region boxes as (name, lat_min, lat_max, lon_min, lon_max). The first
+#: match wins.
 REGIONS = (
     ("N America", 12, 85, -170, -50),
     ("C/S America", -60, 12, -120, -30),
@@ -38,7 +39,8 @@ def region_of(lat: float, lon: float) -> str:
         lon: Longitude in degrees.
 
     Returns:
-        The first region in :data:`REGIONS` whose box contains the point, else ``"Other"``.
+        The first region in :data:`REGIONS` whose box contains the point, else
+        ``"Other"``.
     """
     for name, lat_min, lat_max, lon_min, lon_max in REGIONS:
         if lat_min <= lat < lat_max and lon_min <= lon < lon_max:
@@ -57,7 +59,9 @@ def _unit(lat: pd.Series, lon: pd.Series) -> np.ndarray:
         Array of shape ``[N, 3]``.
     """
     phi, lam = np.deg2rad(lat.to_numpy()), np.deg2rad(lon.to_numpy())
-    return np.stack([np.cos(phi) * np.cos(lam), np.cos(phi) * np.sin(lam), np.sin(phi)], -1)
+    return np.stack(
+        [np.cos(phi) * np.cos(lam), np.cos(phi) * np.sin(lam), np.sin(phi)], -1
+    )
 
 
 def assign_clusters(df: pd.DataFrame, seeds: pd.DataFrame) -> pd.Series:
@@ -70,7 +74,9 @@ def assign_clusters(df: pd.DataFrame, seeds: pd.DataFrame) -> pd.Series:
     Returns:
         Series named ``cluster_id`` holding the index of the nearest seed.
     """
-    _, nearest = cKDTree(_unit(seeds["lat"], seeds["lon"])).query(_unit(df["lat"], df["lon"]))
+    _, nearest = cKDTree(_unit(seeds["lat"], seeds["lon"])).query(
+        _unit(df["lat"], df["lon"])
+    )
     return pd.Series(nearest, index=df.index, name="cluster_id")
 
 
@@ -79,12 +85,12 @@ def assign_splits(
     fractions: tuple[float, float, float] = _DEFAULT_FRACTIONS,
     seed: int = 0,
 ) -> pd.Series:
-    """Assign whole clusters to train, validation or test, stratified by ``stratum``.
+    """Assign whole clusters to train, validation or test by ``stratum``.
 
     Args:
         df: Rows with ``cluster_id`` and ``stratum`` columns.
-        fractions: Shares of clusters per stratum for train, validation and test; only the last two
-            are used, the rest of the clusters go to train.
+        fractions: Shares of clusters per stratum for train, validation and test;
+            only the last two are used, the rest of the clusters go to train.
         seed: Seed of the random assignment.
 
     Returns:
@@ -95,7 +101,10 @@ def assign_splits(
     clusters = df.drop_duplicates("cluster_id")[["cluster_id", "stratum"]]
     for _, group in clusters.groupby("stratum"):
         ids = rng.permutation(group["cluster_id"].to_numpy())
-        n_val, n_test = round(len(ids) * fractions[1]), round(len(ids) * fractions[2])
+        n_val, n_test = (
+            round(len(ids) * fractions[1]),
+            round(len(ids) * fractions[2]),
+        )
         out[df["cluster_id"].isin(ids[:n_val])] = "val"
         out[df["cluster_id"].isin(ids[n_val : n_val + n_test])] = "test"
     return out
@@ -139,7 +148,8 @@ def stratified_downsample(
 
     Args:
         df: Rows to sample from.
-        n: Number of rows wanted. If the frame is not larger, it is returned unchanged.
+        n: Number of rows wanted. If the frame is not larger, it is returned
+            unchanged.
         region_col: Column holding the region of each row.
         pre_share: Pre-filter share of each region. Defaults to the current shares.
         seed: Seed of the random sample.
@@ -152,7 +162,8 @@ def stratified_downsample(
         return df
     share = pre_share or df[region_col].value_counts(normalize=True).to_dict()
     caps = {
-        r: int(np.floor((share.get(r, 0) + _REGION_SLACK) * n)) for r in df[region_col].unique()
+        r: int(np.floor((share.get(r, 0) + _REGION_SLACK) * n))
+        for r in df[region_col].unique()
     }
     avail = df[region_col].value_counts()
     take = {r: min(int(avail[r]), caps[r]) for r in avail.index}
@@ -160,17 +171,26 @@ def stratified_downsample(
         room = {r: min(int(avail[r]), caps[r]) - take[r] for r in take}
         room = {r: v for r, v in room.items() if v > 0}
         if not room:
-            caps = {r: int(avail[r]) for r in avail.index}  # caps infeasible: relax them
+            caps = {
+                r: int(avail[r]) for r in avail.index
+            }  # caps infeasible: relax them
             continue
         take[max(room, key=lambda r: room[r])] += 1
     while sum(take.values()) > n:
         take[max(take, key=lambda r: take[r])] -= 1
-    parts = [g.iloc[rng.permutation(len(g))[: take[r]]] for r, g in df.groupby(region_col)]
-    return cast("pd.DataFrame", pd.concat(parts).sort_index())  # pandas-stubs lose the type here
+    parts = [
+        g.iloc[rng.permutation(len(g))[: take[r]]]
+        for r, g in df.groupby(region_col)
+    ]
+    return cast(
+        "pd.DataFrame", pd.concat(parts).sort_index()
+    )  # pandas-stubs lose the type here
 
 
-def cap_share(df: pd.DataFrame, member: pd.Series, cap: float, seed: int = 0) -> pd.DataFrame:
-    """Within each split, keep rows where ``member`` is true at no more than ``cap`` of the split.
+def cap_share(
+    df: pd.DataFrame, member: pd.Series, cap: float, seed: int = 0
+) -> pd.DataFrame:
+    """Cap the share of ``member`` rows in each split at ``cap``.
 
     Args:
         df: Rows with a ``split`` column.
@@ -190,7 +210,9 @@ def cap_share(df: pd.DataFrame, member: pd.Series, cap: float, seed: int = 0) ->
         if len(inside) > max_inside:
             inside = inside.iloc[rng.permutation(len(inside))[:max_inside]]
         keep += [rest, inside]
-    return cast("pd.DataFrame", pd.concat(keep).sort_index())  # pandas-stubs lose the type here
+    return cast(
+        "pd.DataFrame", pd.concat(keep).sort_index()
+    )  # pandas-stubs lose the type here
 
 
 def cap_water(

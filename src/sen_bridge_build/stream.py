@@ -1,10 +1,10 @@
 # Copyright 2026 The sen-bridge authors.
 # SPDX-License-Identifier: Apache-2.0
-"""Stream SSL4EO-S12 v1.1 samples straight from Hugging Face with HTTP range requests.
+"""Stream SSL4EO-S12 v1.1 from Hugging Face with HTTP range requests.
 
-Nothing is written to disk except small cached tar indices. A shard is a tar of per-sample Zarr-v2
-zips; a season of S2L2A is a single blosc chunk (about 1 MB), so only the seasons that survive the
-metadata filters are fetched.
+Nothing is written to disk except small cached tar indices. A shard is a tar of
+per-sample Zarr-v2 zips; a season of S2L2A is a single blosc chunk (about 1 MB), so
+only the seasons that survive the metadata filters are fetched.
 """
 
 from __future__ import annotations
@@ -57,8 +57,8 @@ _WHOLE_ARRAY = "0.0.0.0"  # ruff: ignore[hardcoded-bind-all-interfaces]
 class Remote:
     """A remote file read with HTTP range requests over one resolved CDN URL.
 
-    The ``HfFileSystem`` costs about 2 s per call, the resolved CDN URL about 0.7 s, and the latter
-    parallelises well.
+    The ``HfFileSystem`` costs about 2 s per call, the resolved CDN URL about 0.7 s,
+    and the latter parallelises well.
 
     Attributes:
         name: Path of the file inside the repository.
@@ -83,7 +83,9 @@ class Remote:
             session: HTTP session to reuse; a new one is created if omitted.
         """
         self.name = f"{split}/{modality}/{shard}"
-        self._hub_url = hf_hub_url(REPO, self.name, repo_type="dataset", revision=commit)
+        self._hub_url = hf_hub_url(
+            REPO, self.name, repo_type="dataset", revision=commit
+        )
         self._session = session or requests.Session()
         self._url = ""
         self.size = 0
@@ -91,12 +93,14 @@ class Remote:
 
     def _resolve(self) -> None:
         """Resolve the signed CDN URL and file size."""
-        response = self._session.head(self._hub_url, allow_redirects=True, timeout=_TIMEOUT_S)
+        response = self._session.head(
+            self._hub_url, allow_redirects=True, timeout=_TIMEOUT_S
+        )
         response.raise_for_status()
         self._url, self.size = response.url, int(response.headers["content-length"])
 
     def get(self, start: int, end: int) -> bytes:
-        """Read a byte range, retrying with backoff on throttling and network errors.
+        """Read a byte range, retrying on throttling and network errors.
 
         Args:
             start: First byte.
@@ -112,7 +116,9 @@ class Remote:
         for attempt in range(_ATTEMPTS):
             try:
                 response = self._session.get(
-                    self._url, headers={"Range": f"bytes={start}-{end - 1}"}, timeout=_TIMEOUT_S
+                    self._url,
+                    headers={"Range": f"bytes={start}-{end - 1}"},
+                    timeout=_TIMEOUT_S,
                 )
             except requests.RequestException:
                 time.sleep(min(2**attempt, _MAX_BACKOFF_S))
@@ -129,13 +135,15 @@ class Remote:
         raise OSError(msg)
 
 
-def tar_index(remote: Remote, cache_dir: Path | None = None) -> dict[str, tuple[int, int]]:
+def tar_index(
+    remote: Remote, cache_dir: Path | None = None
+) -> dict[str, tuple[int, int]]:
     """Index a tar shard by walking its headers with ranged reads.
 
     Args:
         remote: The shard.
-        cache_dir: Directory of cached indices. If given, a cached index is reused and a new one is
-            written.
+        cache_dir: Directory of cached indices. If given, a cached index is reused
+            and a new one is written.
 
     Returns:
         Map from member name to ``(data offset, size)``.
@@ -144,7 +152,9 @@ def tar_index(remote: Remote, cache_dir: Path | None = None) -> dict[str, tuple[
     if cache_dir:
         cache = Path(cache_dir) / (remote.name.replace("/", "__") + ".json")
         if cache.exists():
-            return {k: (v[0], v[1]) for k, v in json.loads(cache.read_text()).items()}
+            return {
+                k: (v[0], v[1]) for k, v in json.loads(cache.read_text()).items()
+            }
     out: dict[str, tuple[int, int]] = {}
     offset = 0
     while offset + _BLOCK <= remote.size:
@@ -155,7 +165,9 @@ def tar_index(remote: Remote, cache_dir: Path | None = None) -> dict[str, tuple[
         header = _BLOCK
         if info.type in {tarfile.XHDTYPE, tarfile.XGLTYPE}:
             header += _BLOCK * ((info.size + _BLOCK - 1) // _BLOCK) + _BLOCK
-            info = tarfile.TarInfo.frombuf(block[header - _BLOCK : header], "utf-8", "strict")
+            info = tarfile.TarInfo.frombuf(
+                block[header - _BLOCK : header], "utf-8", "strict"
+            )
         out[info.name] = (offset + header, info.size)
         offset += header + _BLOCK * ((info.size + _BLOCK - 1) // _BLOCK)
     if cache:
@@ -165,9 +177,12 @@ def tar_index(remote: Remote, cache_dir: Path | None = None) -> dict[str, tuple[
 
 
 class RangeView(io.RawIOBase):
-    """Read-only window ``[offset, offset + size)`` of a :class:`Remote` for ``zipfile`` to seek in.
+    """Read-only window of a :class:`Remote` that ``zipfile`` can seek in.
 
-    One read-ahead block is kept so that the many small reads of a zip directory cost one request.
+    The window is ``[offset, offset + size)`` of the remote file.
+
+    One read-ahead block is kept so that the many small reads of a zip directory
+    cost one request.
     """
 
     def __init__(self, remote: Remote, offset: int, size: int) -> None:
@@ -234,7 +249,11 @@ class RangeView(io.RawIOBase):
         Returns:
             Up to ``size`` bytes; empty at the end of the window.
         """
-        want = self._size - self._pos if size < 0 else min(size, self._size - self._pos)
+        want = (
+            self._size - self._pos
+            if size < 0
+            else min(size, self._size - self._pos)
+        )
         if want <= 0:
             return b""
         if not (
@@ -244,7 +263,10 @@ class RangeView(io.RawIOBase):
             if (
                 self._pos + max(want, _READ_AHEAD) >= self._size
             ):  # near the end: fetch the tail block
-                start, end = max(0, min(self._pos, self._size - _READ_AHEAD)), self._size
+                start, end = (
+                    max(0, min(self._pos, self._size - _READ_AHEAD)),
+                    self._size,
+                )
             else:
                 start, end = self._pos, self._pos + max(want, _READ_AHEAD)
             self._block = self._remote.get(self._base + start, self._base + end)
@@ -272,8 +294,8 @@ class RangeView(io.RawIOBase):
 class Sample:
     """One sample's Zarr zip, read chunk by chunk.
 
-    Array metadata (``.zarray``) is identical across samples of a modality, so it is cached on the
-    class.
+    Array metadata (``.zarray``) is identical across samples of a modality, so it is
+    cached on the class.
     """
 
     _meta: ClassVar[dict[tuple[str, str], dict[str, Any]]] = {}
@@ -315,7 +337,9 @@ class Sample:
         """
         meta = self.attrs(array)
         raw = Blosc().decode(self._zip.read(f"{array}/{index}"))
-        return np.frombuffer(cast("bytes", raw), dtype=meta["dtype"]).reshape(meta["chunks"])
+        return np.frombuffer(cast("bytes", raw), dtype=meta["dtype"]).reshape(
+            meta["chunks"]
+        )
 
     def s2_all(self, season: int) -> NDArray[np.int16]:
         """Read all 12 L2A bands of one season.
@@ -324,8 +348,8 @@ class Sample:
             season: Season index 0 to 3.
 
         Returns:
-            Digital numbers of shape ``[12, 264, 264]`` in the order B01, B02, B03, B04, B05, B06,
-            B07, B08, B8A, B09, B11, B12.
+            Digital numbers of shape ``[12, 264, 264]`` in the order B01, B02, B03,
+            B04, B05, B06, B07, B08, B8A, B09, B11, B12.
         """
         return self.chunk("bands", f"{season}.0.0.0")[0]
 
@@ -336,8 +360,8 @@ class Sample:
             season: Season index 0 to 3.
 
         Returns:
-            Classes of shape ``[264, 264]``: 0 land, 1 water, 2 snow, 3 thin cloud, 4 thick cloud,
-            5 cloud shadow, 6 no data.
+            Classes of shape ``[264, 264]``: 0 land, 1 water, 2 snow, 3 thin cloud,
+            4 thick cloud, 5 cloud shadow, 6 no data.
         """
         return self.chunk("cloud_mask", f"{season}.0.0")[0]
 

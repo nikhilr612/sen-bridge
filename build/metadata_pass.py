@@ -6,14 +6,15 @@ Usage::
 
     python build/metadata_pass.py train_metadata.parquet candidates.parquet
 
-Turns the one-row-per-location table into one row per location-season and keeps the rows that pass
-the time-gap and local-winter filters.
+Turns the one-row-per-location table into one row per location-season and keeps the
+rows that pass the time-gap and local-winter filters.
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
@@ -26,12 +27,12 @@ def long_form(df: pd.DataFrame) -> pd.DataFrame:
     """Reshape the location table into one row per location-season.
 
     Args:
-        df: SSL4EO metadata with ``S1_time_k``, ``S2_time_k`` and ``cloud_cover_k`` columns for
-            ``k`` in 0..3 and ``center_lat`` / ``center_lon`` columns.
+        df: SSL4EO metadata with ``S1_time_k``, ``S2_time_k`` and ``cloud_cover_k``
+            columns for ``k`` in 0..3 and ``center_lat`` / ``center_lon`` columns.
 
     Returns:
-        One row per location-season with ``id``, ``season``, ``t_radar``, ``t_optical``,
-        ``dt_hours``, ``doy``, ``cloud_cover``, ``lat`` and ``lon``.
+        One row per location-season with ``id``, ``season``, ``t_radar``,
+        ``t_optical``, ``dt_hours``, ``doy``, ``cloud_cover``, ``lat`` and ``lon``.
     """
     base = df.drop(columns=["geometry"], errors="ignore")
     rows = [
@@ -47,7 +48,10 @@ def long_form(df: pd.DataFrame) -> pd.DataFrame:
     out["dt_hours"] = (out["t_optical"] - out["t_radar"]).dt.total_seconds() / 3600
     out["doy"] = out["t_optical"].dt.dayofyear
     out["id"] = out["sample_id"] + "_" + out["season"].astype(str)
-    return out.rename(columns={"center_lat": "lat", "center_lon": "lon"})
+    return cast(
+        "pd.DataFrame",
+        out.rename(columns={"center_lat": "lat", "center_lon": "lon"}),
+    )  # pandas stubs lose the type
 
 
 def main() -> None:
@@ -58,7 +62,9 @@ def main() -> None:
     args = parser.parse_args()
     df = long_form(pd.read_parquet(args.src))
     keep = filters.metadata_ok(df["dt_hours"], df["lat"], df["t_optical"].dt.month)
-    print(f"location-seasons: {len(df)} -> {int(keep.sum())} (time gap + snow season)")
+    print(
+        f"location-seasons: {len(df)} -> {int(keep.sum())} (time gap + snow season)"
+    )
     df[keep].to_parquet(args.dst)
 
 

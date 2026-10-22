@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Framework-free FID maths and the statistics file format.
 
-The Frechet distance follows pytorch-fid (Apache-2.0, Maximilian Seitzer); see NOTICE.
+The Frechet distance follows pytorch-fid (Apache-2.0, Maximilian Seitzer); see
+NOTICE.
 """
 
 from __future__ import annotations
@@ -44,7 +45,8 @@ def frechet_distance(
 ) -> float:
     """Compute the Frechet distance between two Gaussians.
 
-    A singular covariance product is stabilised by a small diagonal offset, as in pytorch-fid.
+    A singular covariance product is stabilised by a small diagonal offset, as in
+    pytorch-fid.
 
     Args:
         mu1: Mean of the first Gaussian, shape ``[D]``.
@@ -57,7 +59,8 @@ def frechet_distance(
         The squared Frechet distance.
 
     Raises:
-        ValueError: If the matrix square root has a non-negligible imaginary component.
+        ValueError: If the matrix square root has a non-negligible imaginary
+            component.
     """
     diff = mu1 - mu2
     covmean = linalg.sqrtm(sigma1.dot(sigma2))
@@ -66,12 +69,13 @@ def frechet_distance(
         covmean = linalg.sqrtm((sigma1 + offset).dot(sigma2 + offset))
     if np.iscomplexobj(covmean):
         if not np.allclose(np.diagonal(covmean).imag, 0, atol=_IMAG_ATOL):
-            msg = (
-                f"imaginary component {np.max(np.abs(covmean.imag)):.3g} in the matrix square root"
-            )
+            detail = f"imaginary component {np.max(np.abs(covmean.imag)):.3g}"
+            msg = f"{detail} in the matrix square root"
             raise ValueError(msg)
         covmean = covmean.real
-    return float(diff @ diff + np.trace(sigma1) + np.trace(sigma2) - 2 * np.trace(covmean))
+    return float(
+        diff @ diff + np.trace(sigma1) + np.trace(sigma2) - 2 * np.trace(covmean)
+    )
 
 
 def save_stats(path: Path | str, mu: Matrix, sigma: Matrix) -> None:

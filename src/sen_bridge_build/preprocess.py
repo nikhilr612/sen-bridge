@@ -21,7 +21,9 @@ _POWER_FLOOR = 1e-10
 _DB_PER_DECADE = 10.0
 
 
-def center_crop(a: NDArray[_Scalar], size: int = constants.CROP) -> NDArray[_Scalar]:
+def center_crop(
+    a: NDArray[_Scalar], size: int = constants.CROP
+) -> NDArray[_Scalar]:
     """Crop the last two axes around the centre.
 
     Args:
@@ -50,7 +52,9 @@ def avg_2x2(a: NDArray[np.float32]) -> NDArray[np.float32]:
 
 
 def sar_to_db128(vv_vh_db: NDArray[np.floating]) -> NDArray[np.float32]:
-    """Crop and 2x2 average radar in linear power (classical multi-looking), then return to dB.
+    """Crop and average radar 2x2 in linear power, then return to dB.
+
+    This is classical multi-looking.
 
     Args:
         vv_vh_db: Radar VV and VH in dB, shape ``[2, H, W]``.
@@ -59,12 +63,16 @@ def sar_to_db128(vv_vh_db: NDArray[np.floating]) -> NDArray[np.float32]:
         Radar in dB, shape ``[2, 128, 128]``.
     """
     cropped = center_crop(np.asarray(vv_vh_db, dtype=np.float32))
-    power = avg_2x2(np.power(_DB_PER_DECADE, cropped / _DB_PER_DECADE).astype(np.float32))
-    return (_DB_PER_DECADE * np.log10(np.maximum(power, _POWER_FLOOR))).astype(np.float32)
+    power = avg_2x2(
+        np.power(_DB_PER_DECADE, cropped / _DB_PER_DECADE).astype(np.float32)
+    )
+    return (_DB_PER_DECADE * np.log10(np.maximum(power, _POWER_FLOOR))).astype(
+        np.float32
+    )
 
 
 def sar_to_uint8(db: NDArray[np.floating]) -> NDArray[np.uint8]:
-    """Map radar to three 8-bit channels (VV, VH, VV-VH) with the frozen clip ranges.
+    """Map radar to three 8-bit channels (VV, VH, VV-VH) with frozen clips.
 
     Args:
         db: Radar VV and VH in dB, shape ``[2, 128, 128]``.
@@ -95,12 +103,15 @@ def sar_from_uint8(u8: NDArray[np.uint8]) -> NDArray[np.float32]:
     return out
 
 
-def opt_reflectance128(rgb_dn: NDArray[np.number], offset: float = 0.0) -> NDArray[np.float32]:
+def opt_reflectance128(
+    rgb_dn: NDArray[np.number], offset: float = 0.0
+) -> NDArray[np.float32]:
     """Crop and 2x2 average Sentinel-2 L2A digital numbers into reflectance.
 
     Args:
         rgb_dn: Digital numbers, shape ``[C, H, W]``.
-        offset: Processing-baseline offset added before scaling (0 for 2019 to 2021 scenes).
+        offset: Processing-baseline offset added before scaling (0 for 2019 to 2021
+            scenes).
 
     Returns:
         Reflectance, shape ``[C, 128, 128]``.
@@ -110,7 +121,7 @@ def opt_reflectance128(rgb_dn: NDArray[np.number], offset: float = 0.0) -> NDArr
 
 
 def opt_to_uint8(rho: NDArray[np.floating]) -> NDArray[np.uint8]:
-    """Map reflectance to 8 bits: clip to [0, 0.3], apply gamma 1/2.2, scale to 0..255.
+    """Map reflectance to 8 bits: clip to [0, 0.3], gamma 1/2.2, scale to 255.
 
     Args:
         rho: Reflectance of any shape.
@@ -118,7 +129,9 @@ def opt_to_uint8(rho: NDArray[np.floating]) -> NDArray[np.uint8]:
     Returns:
         Array of the same shape with values 0 to 255.
     """
-    unit = (np.clip(rho, 0.0, constants.OPT_MAX) / constants.OPT_MAX) ** constants.OPT_GAMMA
+    unit = (
+        np.clip(rho, 0.0, constants.OPT_MAX) / constants.OPT_MAX
+    ) ** constants.OPT_GAMMA
     return np.round(unit * _MAX_LEVEL).astype(np.uint8)
 
 
@@ -132,7 +145,9 @@ def opt_from_uint8(u8: NDArray[np.uint8]) -> NDArray[np.float32]:
         Reflectance of the same shape.
     """
     unit = u8.astype(np.float32) / _MAX_LEVEL
-    return (unit ** (1 / constants.OPT_GAMMA) * constants.OPT_MAX).astype(np.float32)
+    return (unit ** (1 / constants.OPT_GAMMA) * constants.OPT_MAX).astype(
+        np.float32
+    )
 
 
 def to_model_range(u8: NDArray[np.uint8]) -> NDArray[np.float32]:
