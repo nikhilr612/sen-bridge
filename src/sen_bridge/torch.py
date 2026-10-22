@@ -1,7 +1,12 @@
 """PyTorch metrics: FID, LPIPS (VGG), PSNR, SSIM.
 
 Inputs are float images in [-1, 1], shape [B, 3, H, W]. Every metric first rounds to uint8, so scores never
-depend on the float precision of the outputs. Frozen settings (none are arguments):
+depend on the float precision of the outputs.
+
+Evaluation only: rounding to uint8 has zero gradient, so never use these metrics as a training loss. Values outside
+[-1, 1] are clipped silently (a model outputting 2.0 scores like one outputting 1.0), so check your output range. Rounding
+is idempotent on 8-bit images (u / 127.5 - 1 -> same u), and 0.0 falls on a rounding tie and becomes ~+0.004; both are
+inherent to the 8-bit encoding and identical in the two backends. Frozen settings (none are arguments):
 FID: pytorch-fid Inception-v3 weights with clean-fid CPU bicubic resize to 299x299; LPIPS: VGG16 trunk, v0.1 linear
 layers; SSIM: 11x11 Gaussian, sigma 1.5, data range 1.
 
