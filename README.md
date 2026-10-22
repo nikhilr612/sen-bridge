@@ -6,9 +6,20 @@ code that builds the SEN-Bridge dataset (radar-to-optical Sentinel-1/2 pairs for
 The metrics package knows nothing about splits, loaders or models: you decide what to compare and when.
 
 ```
-pip install "sen-bridge[torch]"     # or [jax]
-python -m sen_bridge.weights        # one-off: downloads, hash-checks and converts the three weight files (needs torch)
+pip install "sen-bridge[torch]"     # or "sen-bridge[jax,convert]" for JAX
+python -m sen_bridge.weights        # one-off: download, hash-check and convert the weights
 ```
+
+The base install needs only numpy, scipy and Pillow. Optional dependencies are extras:
+
+| Extra | Installs | For |
+|---|---|---|
+| `torch` | torch, torchvision, safetensors | `sen_bridge.torch` |
+| `jax` | jax, safetensors | `sen_bridge.jax` |
+| `convert` | torch, safetensors | the one-off weight conversion (needed even with `jax`) |
+| `eval` | datasets | `scripts/evaluate.py`, `scripts/make_fid_stats.py` |
+| `build` | pandas, pyarrow, requests, huggingface_hub, datasets, pyyaml, numcodecs | the dataset build |
+| `dev` | everything above plus ruff, ty, pytest, stubs | `./check.sh` |
 
 ## Metrics
 

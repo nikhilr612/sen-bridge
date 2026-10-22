@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import torch
 
-from sen_bridge import fid_core
+from sen_bridge import fid_core, weights
 from sen_bridge import torch as sbt
 from sen_bridge.resize import resize_batch
 
@@ -132,6 +132,4 @@ def test_fid_accumulator_and_stats_roundtrip(pair: Pair, tmp_path: Path) -> None
 
 
 def test_weight_digests_are_pinned() -> None:
-    from sen_bridge import weights  # ruff: ignore[import-outside-top-level]
-
     assert all(len(src.sha256) == 64 for src in weights.SOURCES.values())

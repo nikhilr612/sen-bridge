@@ -48,10 +48,11 @@ def long_form(df: pd.DataFrame) -> pd.DataFrame:
     out["dt_hours"] = (out["t_optical"] - out["t_radar"]).dt.total_seconds() / 3600
     out["doy"] = out["t_optical"].dt.dayofyear
     out["id"] = out["sample_id"] + "_" + out["season"].astype(str)
+    # pandas-stubs lose the DataFrame return type of ``rename``.
     return cast(
         "pd.DataFrame",
         out.rename(columns={"center_lat": "lat", "center_lon": "lon"}),
-    )  # pandas stubs lose the type
+    )
 
 
 def main() -> None:

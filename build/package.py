@@ -225,6 +225,7 @@ def add_derived(df: pd.DataFrame, seed: int) -> pd.DataFrame:
         df["doy"], df["lat"], df["lon"], df["dt_hours"], desc
     )
     meta_col = pd.Series(list(vectors), index=df.index, dtype=object)
+    # pandas-stubs type ``assign`` too loosely; restore the DataFrame type.
     df = cast("pd.DataFrame", df.assign(meta=meta_col))
     df["cloud_frac"] = df["sensei_cloud_frac"]
     df["clean"] = clean_flag(df)

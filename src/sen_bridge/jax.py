@@ -168,6 +168,7 @@ def _max_pool(x: jax.Array, k: int = 3, stride: int = 1, pad: int = 0) -> jax.Ar
         The pooled batch.
     """
     padding = ((0, 0), (pad, pad), (pad, pad), (0, 0))
+    # lax.reduce_window is untyped (it returns Any); restore the array type.
     return cast(
         "jax.Array",
         lax.reduce_window(
@@ -199,12 +200,14 @@ def _avg_pool(
     """
     window, strides = (1, k, k, 1), (1, stride, stride, 1)
     padding = ((0, 0), (pad, pad), (pad, pad), (0, 0))
+    # lax.reduce_window is untyped (it returns Any); restore the array type.
     total = cast(
         "jax.Array", lax.reduce_window(x, 0.0, lax.add, window, strides, padding)
     )
     if count_pad:
         return total / (k * k)
     ones = jnp.ones((1, *x.shape[1:3], 1), x.dtype)
+    # lax.reduce_window is untyped (it returns Any); restore the array type.
     return total / cast(
         "jax.Array", lax.reduce_window(ones, 0.0, lax.add, window, strides, padding)
     )
@@ -364,12 +367,12 @@ def lpips(x: jax.Array, y: jax.Array) -> jax.Array:
     """
 
     def to_model_range(t: jax.Array) -> jax.Array:
-        return cast(
-            "jax.Array", (quantise(t) * 2 - 1)[None]
-        )  # indexing is untyped for ty
+        # Indexing a jax array is untyped for ty; the result is an array.
+        return cast("jax.Array", (quantise(t) * 2 - 1)[None])
 
     distance = _lpips_apply(_lpips_params(), to_model_range(x), to_model_range(y))
-    return cast("jax.Array", distance[0])  # indexing is untyped for ty
+    # Indexing a jax array is untyped for ty; the result is an array.
+    return cast("jax.Array", distance[0])
 
 
 # ---- FID Inception -----------------------------------------------------------

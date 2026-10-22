@@ -130,6 +130,7 @@ class Remote:
                 time.sleep(min(2**attempt, _MAX_BACKOFF_S))
                 continue
             response.raise_for_status()
+            # requests types ``content`` as ``bytes | Any``; it is bytes.
             return cast("bytes", response.content)
         msg = f"range read failed for {self.name}"
         raise OSError(msg)
@@ -337,6 +338,7 @@ class Sample:
         """
         meta = self.attrs(array)
         raw = Blosc().decode(self._zip.read(f"{array}/{index}"))
+        # numcodecs is untyped; ``decode`` returns a bytes-like buffer.
         return np.frombuffer(cast("bytes", raw), dtype=meta["dtype"]).reshape(
             meta["chunks"]
         )

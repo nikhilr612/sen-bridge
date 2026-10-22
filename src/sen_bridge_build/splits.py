@@ -182,9 +182,8 @@ def stratified_downsample(
         g.iloc[rng.permutation(len(g))[: take[r]]]
         for r, g in df.groupby(region_col)
     ]
-    return cast(
-        "pd.DataFrame", pd.concat(parts).sort_index()
-    )  # pandas-stubs lose the type here
+    # pandas-stubs lose the DataFrame type through ``concat``.
+    return cast("pd.DataFrame", pd.concat(parts).sort_index())
 
 
 def cap_share(
@@ -210,9 +209,8 @@ def cap_share(
         if len(inside) > max_inside:
             inside = inside.iloc[rng.permutation(len(inside))[:max_inside]]
         keep += [rest, inside]
-    return cast(
-        "pd.DataFrame", pd.concat(keep).sort_index()
-    )  # pandas-stubs lose the type here
+    # pandas-stubs lose the DataFrame type through ``concat``.
+    return cast("pd.DataFrame", pd.concat(keep).sort_index())
 
 
 def cap_water(

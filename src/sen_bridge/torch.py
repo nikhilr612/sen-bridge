@@ -81,6 +81,8 @@ def _call(module: nn.Module, *args: torch.Tensor) -> torch.Tensor:
     Returns:
         The module's output.
     """
+    # nn.Module.__call__ is typed as returning Any; every network here returns a
+    # tensor.
     return cast("torch.Tensor", module(*args))
 
 
@@ -207,6 +209,9 @@ class _LPIPS(nn.Module):
                 taps.append(x)
         return taps
 
+    # torch types ``Module.forward`` as a writable attribute, so ty rejects the
+    # standard method override; overriding ``forward`` is torch's documented
+    # pattern.
     @override
     def forward(  # ty: ignore[invalid-mutable-override]
         self, x: torch.Tensor, y: torch.Tensor
@@ -376,6 +381,9 @@ class _FIDInception(nn.Module):
         self.load_state_dict(state)
         self.eval().requires_grad_(requires_grad=False)
 
+    # torch types ``Module.forward`` as a writable attribute, so ty rejects the
+    # standard method override; overriding ``forward`` is torch's documented
+    # pattern.
     @override
     def forward(  # ty: ignore[invalid-mutable-override]
         self, x: torch.Tensor

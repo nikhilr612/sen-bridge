@@ -82,9 +82,9 @@ def select(path: Path, shards: int, seed: int) -> tuple[pd.DataFrame, list[str]]
         np.random.default_rng(seed).permutation(sorted(candidates["tar"].unique()))
     )
     chosen = [str(t) for t in tars[:shards]]
-    subset = cast(
-        "pd.DataFrame", candidates[candidates["tar"].isin(chosen)]
-    )  # stubs lose the type
+    # pandas-stubs lose the DataFrame type through boolean indexing.
+    subset = cast("pd.DataFrame", candidates[candidates["tar"].isin(chosen)])
+    # pandas-stubs lose the DataFrame type through ``reset_index``.
     return cast("pd.DataFrame", subset.reset_index(drop=True)), chosen
 
 

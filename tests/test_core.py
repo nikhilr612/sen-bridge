@@ -151,11 +151,13 @@ def test_clean_record_passes() -> None:
 def test_each_filter_rejects_with_its_own_reason(
     change: dict[str, float], reason: str
 ) -> None:
+    # The test builds a record from a dict literal; cast it to the TypedDict.
     record = cast("Record", {**_clean_record(), **change})
     assert reject_reason(record, invalid=False) == reason
 
 
 def test_invalid_pixels_win_over_every_other_reason() -> None:
+    # The test builds a record from a dict literal; cast it to the TypedDict.
     record = cast(
         "Record", {**_clean_record(), "sat_frac": 0.5, "elev_mean": 3000.0}
     )
@@ -163,5 +165,6 @@ def test_invalid_pixels_win_over_every_other_reason() -> None:
 
 
 def test_arid_flat_bright_is_not_rejected_off_arid_land() -> None:
+    # The test builds a record from a dict literal; cast it to the TypedDict.
     record = cast("Record", {**_clean_record(), "opt_mean": 0.95, "opt_std": 0.01})
     assert reject_reason(record, invalid=False) is None

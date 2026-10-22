@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
+from sen_bridge import weights
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -57,8 +59,6 @@ def pair() -> tuple[NDArray[np.float32], NDArray[np.float32]]:
 @pytest.fixture(scope="session")
 def weights_ready() -> None:
     """Make sure the metric weights are available, or skip the test."""
-    from sen_bridge import weights  # ruff: ignore[import-outside-top-level]
-
     try:
         weights.path("fid_inception")
         weights.path("lpips_vgg")

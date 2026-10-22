@@ -143,11 +143,13 @@ def _fetch(name: str) -> Path:
 def prepare() -> None:
     """Fetch, verify and convert all weights into the cache.
 
-    This is a one-off step. It imports torch to unpickle the original ``.pth``
-    files.
+    This is a one-off step. It imports torch (extra ``convert``) to unpickle the
+    original ``.pth`` files.
     """
-    # torch is an optional dependency that only this one-off conversion needs.
+    # Optional dependency (extra ``convert``) needed only by this one-off step.
     import safetensors.torch as st  # ruff: ignore[import-outside-top-level]
+
+    # Optional dependency (extra ``convert``) needed only by this one-off step.
     import torch  # ruff: ignore[import-outside-top-level]
 
     fid = torch.load(_fetch("fid_inception"), map_location="cpu", weights_only=True)

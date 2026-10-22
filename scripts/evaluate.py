@@ -95,6 +95,7 @@ class TorchBackend:
         # torch is an optional dependency, imported only when selected.
         import torch  # ruff: ignore[import-outside-top-level]
 
+        # Same optional dependency as the import above.
         from sen_bridge import torch as sb  # ruff: ignore[import-outside-top-level]
 
         self._torch, self._sb = torch, sb
@@ -153,8 +154,11 @@ class JaxBackend:
         """
         # jax is an optional dependency, imported only when selected.
         import jax  # ruff: ignore[import-outside-top-level]
+
+        # Same optional dependency as the import above.
         import jax.numpy as jnp  # ruff: ignore[import-outside-top-level]
 
+        # Same optional dependency as the import above.
         from sen_bridge import jax as sb  # ruff: ignore[import-outside-top-level]
 
         self._jnp = jnp

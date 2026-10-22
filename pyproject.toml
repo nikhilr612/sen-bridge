@@ -8,10 +8,39 @@ requires-python = ">=3.10"
 dependencies = ["numpy", "scipy", "pillow"]
 
 [project.optional-dependencies]
-torch = ["torch", "torchvision", "safetensors"]
-jax = ["jax", "safetensors"]  # the one-off weight conversion (python -m sen_bridge.weights) also needs torch
-build = ["pandas", "pyarrow", "requests", "huggingface_hub", "datasets", "pyyaml", "rasterio"]
-dev = ["pytest", "scikit-image", "pytorch-fid", "lpips", "torch", "torchvision", "jax", "safetensors", "pandas", "pyarrow", "requests", "huggingface_hub", "datasets", "pyyaml"]
+# Metrics backends: install the one you use.
+torch = ["torch", "torchvision", "safetensors", "typing-extensions"]
+jax = ["jax", "safetensors"]
+# One-off conversion of the downloaded weights (python -m sen_bridge.weights). It
+# unpickles the original .pth files, so it needs torch even for JAX users.
+convert = ["torch", "safetensors"]
+# scripts/evaluate.py and scripts/make_fid_stats.py (also install torch or jax).
+eval = ["datasets"]
+# The dataset build (sen_bridge_build and build/).
+build = [
+    "pandas",
+    "pyarrow",
+    "requests",
+    "huggingface_hub",
+    "datasets",
+    "pyyaml",
+    "numcodecs",
+    "typing-extensions",
+]
+# Everything needed to run ./check.sh: tools, test references and type stubs.
+dev = [
+    "sen-bridge[torch,jax,build]",
+    "pytest",
+    "ruff",
+    "ty",
+    "scikit-image",
+    "pytorch-fid",
+    "lpips",
+    "pandas-stubs",
+    "types-requests",
+    "types-pyyaml",
+    "scipy-stubs",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -30,8 +59,9 @@ preview = true
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    "missing-trailing-comma",  # missing trailing comma: conflicts with the formatter
-    "single-line-implicit-string-concatenation",  # implicit string concatenation on one line: conflicts with the formatter
+    # Both conflict with the formatter, which adds and removes these itself.
+    "missing-trailing-comma",
+    "single-line-implicit-string-concatenation",
 ]
 
 [tool.ruff.lint.pycodestyle]
@@ -45,17 +75,30 @@ notice-rgx = "(?i)Copyright 20\\d{2} The sen-bridge authors"
 
 [tool.ruff.lint.per-file-ignores]
 "build/**" = [
-    "implicit-namespace-package",  # scripts run as `python build/x.py`, not importable packages
-    "print",  # command-line tools report progress on stdout
-]
-"scripts/**" = ["implicit-namespace-package", "print"]
-"tests/**" = [
+    # Scripts run as `python build/x.py`; they are not importable packages.
     "implicit-namespace-package",
-    "assert",  # pytest asserts
-    "magic-value-comparison",  # literal expected values in assertions
-    "undocumented-public-function",  # test names are the documentation
-    "missing-return-type-undocumented-public-function",  # test functions return None
-    "private-member-access",  # tests reset module caches
+    # Command-line tools report progress on stdout.
+    "print",
+]
+"scripts/**" = [
+    # Scripts run as `python scripts/x.py`; they are not importable packages.
+    "implicit-namespace-package",
+    # Command-line tools report results on stdout.
+    "print",
+]
+"tests/**" = [
+    # Tests are collected by pytest; they are not an importable package.
+    "implicit-namespace-package",
+    # pytest tests are written as assertions.
+    "assert",
+    # Tests compare against literal expected values.
+    "magic-value-comparison",
+    # The test name is the documentation of a test function.
+    "undocumented-public-function",
+    # Test functions return None.
+    "missing-return-type-undocumented-public-function",
+    # Tests reset module-level caches to exercise first-call behaviour.
+    "private-member-access",
 ]
 
 [tool.ruff.format]
