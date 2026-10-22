@@ -42,6 +42,10 @@ sensor coupling, no synthetic degradation.
   `abs(dt_hours) <= 24`.
 - **Evaluation:** `scripts/evaluate.py` and the `sen-bridge` metrics (FID, LPIPS,
   PSNR, SSIM); real-target FID statistics are in `stats/`.
+- **Code:** the installable `sen-bridge` package is at
+  <https://github.com/nikhilr612/sen-bridge> (tag `v0.1.0`); `scripts/` here is a
+  reference snapshot. Install with `uv add "sen-bridge[torch] @
+  git+https://github.com/nikhilr612/sen-bridge@v0.1.0"`.
 
 ## Provenance
 
