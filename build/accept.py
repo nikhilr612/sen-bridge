@@ -21,9 +21,13 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import sys
+import time
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from pathlib import Path
-from typing import NamedTuple, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 import numpy as np
 import pandas as pd
@@ -74,6 +78,10 @@ _TABLE_COLUMNS = [
 ]
 
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Hashable, Mapping
+
+
 class Result(NamedTuple):
     """The outcome of one check.
 
@@ -81,11 +89,30 @@ class Result(NamedTuple):
         name: Short name of the check.
         passed: Whether it passed.
         detail: What was measured, or why it failed.
+        seconds: How long the check took (its share, if one step gave several
+            results).
     """
 
     name: str
     passed: bool
     detail: str
+    seconds: float = 0.0
+
+
+def timed(step: Callable[[], Result | list[Result]]) -> list[Result]:
+    """Run one check step and record how long it took.
+
+    Args:
+        step: A function returning one result or a list of results.
+
+    Returns:
+        The results, each carrying its share of the step's duration.
+    """
+    start = time.perf_counter()
+    out = step()
+    items = out if isinstance(out, list) else [out]
+    share = (time.perf_counter() - start) / len(items)
+    return [r._replace(seconds=round(share, 1)) for r in items]
 
 
 def data_files(release: Path) -> list[Path]:
@@ -322,12 +349,110 @@ def optical_stats_of(png: bytes) -> filters.OpticalStats:
     return filters.optical_stats(arr.transpose(2, 0, 1))
 
 
+class ShardScan(NamedTuple):
+    """What decoding one data shard found.
+
+    Attributes:
+        pairs: Number of image pairs in the shard.
+        bad: Number of images that failed to decode or had the wrong shape.
+        stats: Optical statistics of each pair, in row order.
+    """
+
+    pairs: int
+    bad: int
+    stats: list[filters.OpticalStats]
+
+
+def scan_shard(path: Path) -> ShardScan:
+    """Decode every image of one shard and measure the optical ones.
+
+    Runs in a worker process, so it is a module-level function.
+
+    Args:
+        path: A data shard.
+
+    Returns:
+        The number of pairs, the number of bad images and the optical statistics.
+    """
+    bad, pairs = 0, 0
+    stats: list[filters.OpticalStats] = []
+    for batch in pq.ParquetFile(path).iter_batches(
+        batch_size=_BATCH, columns=["sar", "optical"]
+    ):
+        sar, optical = (
+            batch.column("sar").to_pylist(),
+            batch.column("optical").to_pylist(),
+        )
+        for s, o in zip(sar, optical, strict=True):
+            pairs += 1
+            try:
+                if np.asarray(Image.open(io.BytesIO(s["bytes"]))).shape != _IMG:
+                    bad += 1
+                stats.append(optical_stats_of(o["bytes"]))
+            except (OSError, ValueError):
+                bad += 1
+                stats.append(
+                    filters.OpticalStats(
+                        opt_mean=0.5,
+                        opt_std=0.5,
+                        opt_white_frac=0.0,
+                        flat_bright=False,
+                    )
+                )
+    return ShardScan(pairs, bad, stats)
+
+
+def neutral_record(
+    row: Mapping[Hashable, Any], optical: filters.OpticalStats
+) -> Record:
+    """Build a record for the shipped rules from a released row and its image.
+
+    Fields the release does not carry (saturation, spectral cloud, other land-cover
+    classes) are set to values that no rule rejects, so only rules that can be
+    checked from the release are tested.
+
+    Args:
+        row: A released row (non-image columns).
+        optical: Statistics measured on the released optical image.
+
+    Returns:
+        A record to pass to :func:`reject_reason`.
+    """
+    return {
+        "id": str(row["id"]),
+        **optical,
+        "water_frac_sar": float(row["water_frac_sar"]),
+        "vh_noise_frac": 0.0,
+        "slope_std": float(row["slope_std"]),
+        "elev_mean": float(row["elev_mean"]),
+        "cloud_rule_frac": 0.0,
+        "snow_score": 0.0,
+        "haze_score": 0.0,
+        "sensei_cloud_frac": float(row["cloud_frac"]),
+        "sensei_nodata_frac": 0.0,
+        "water_frac_opt": float(row["water_frac_opt"]),
+        "snow_frac_opt": 0.0,
+        "rfi_score": 0.0,
+        "sat_frac": 0.0,
+        "border_frac": 0.0,
+        "lulc_water": float(row["lulc_water"]),
+        "lulc_trees": 0.0,
+        "lulc_flooded": 0.0,
+        "lulc_crops": 0.0,
+        "lulc_built": 0.0,
+        "lulc_bare": float(row["lulc_bare"]),
+        "lulc_snow": 0.0,
+        "lulc_rangeland": float(row["lulc_rangeland"]),
+    }
+
+
 def check_images_and_filters(release: Path, df: pd.DataFrame) -> list[Result]:
     """Decode every image and re-apply the filter rules to the released data.
 
-    The optical statistics come from the released PNGs themselves, so this also
-    checks that the stored images agree with the thresholds. Rules that need the raw
-    12-band reflectance (saturation, spectral cloud) cannot be re-checked here.
+    The shards are decoded in parallel worker processes. The optical statistics come
+    from the released PNGs themselves, so this also checks that the stored images
+    agree with the thresholds. Rules that need the raw 12-band reflectance
+    (saturation, spectral cloud) cannot be re-checked here.
 
     Args:
         release: Release directory.
@@ -336,69 +461,20 @@ def check_images_and_filters(release: Path, df: pd.DataFrame) -> list[Result]:
     Returns:
         Results for decodability and for the re-applied filters.
     """
-    rows, bad_images, offset = [], 0, 0
-    for path in data_files(release):
-        pf = pq.ParquetFile(path)
-        for batch in pf.iter_batches(batch_size=_BATCH, columns=["sar", "optical"]):
-            sar, optical = (
-                batch.column("sar").to_pylist(),
-                batch.column("optical").to_pylist(),
-            )
-            for s, o in zip(sar, optical, strict=True):
-                try:
-                    if np.asarray(Image.open(io.BytesIO(s["bytes"]))).shape != _IMG:
-                        bad_images += 1
-                    stats = optical_stats_of(o["bytes"])
-                except (OSError, ValueError):
-                    bad_images += 1
-                    stats = filters.OpticalStats(
-                        opt_mean=0.5,
-                        opt_std=0.5,
-                        opt_white_frac=0.0,
-                        flat_bright=False,
-                    )
-                rows.append(stats)
-            offset += len(sar)
-    stats_df = pd.DataFrame(rows)
+    files = data_files(release)
+    with ProcessPoolExecutor(
+        max_workers=min(len(files), os.cpu_count() or 1)
+    ) as pool:
+        scans = list(pool.map(scan_shard, files))
+    stats = [item for scan in scans for item in scan.stats]
     violations: dict[str, int] = {}
-    for i in range(len(df)):
-        r = df.iloc[i]
-        rec: Record = {
-            "id": str(r["id"]),
-            "opt_mean": float(stats_df["opt_mean"].iloc[i]),
-            "opt_std": float(stats_df["opt_std"].iloc[i]),
-            "opt_white_frac": float(stats_df["opt_white_frac"].iloc[i]),
-            "flat_bright": bool(stats_df["flat_bright"].iloc[i]),
-            "water_frac_sar": float(r["water_frac_sar"]),
-            "vh_noise_frac": 0.0,
-            "slope_std": float(r["slope_std"]),
-            "elev_mean": float(r["elev_mean"]),
-            "cloud_rule_frac": 0.0,
-            "snow_score": 0.0,
-            "haze_score": 0.0,
-            "sensei_cloud_frac": float(r["cloud_frac"]),
-            "sensei_nodata_frac": 0.0,
-            "water_frac_opt": float(r["water_frac_opt"]),
-            "snow_frac_opt": 0.0,
-            "rfi_score": 0.0,
-            "sat_frac": 0.0,
-            "border_frac": 0.0,
-            "lulc_water": float(r["lulc_water"]),
-            "lulc_trees": 0.0,
-            "lulc_flooded": 0.0,
-            "lulc_crops": 0.0,
-            "lulc_built": 0.0,
-            "lulc_bare": float(r["lulc_bare"]),
-            "lulc_snow": 0.0,
-            "lulc_rangeland": float(r["lulc_rangeland"]),
-        }
-        reason = reject_reason(rec, invalid=False)
+    for row, optical in zip(df.to_dict("records"), stats, strict=True):
+        reason = reject_reason(neutral_record(row, optical), invalid=False)
         if reason is not None:
             violations[reason] = violations.get(reason, 0) + 1
+    pairs, bad = sum(s.pairs for s in scans), sum(s.bad for s in scans)
     return [
-        Result(
-            "images decode", bad_images == 0, f"{offset} pairs, {bad_images} bad"
-        ),
+        Result("images decode", bad == 0, f"{pairs} pairs, {bad} bad"),
         Result(
             "filters hold on released data",
             not violations,
@@ -407,32 +483,36 @@ def check_images_and_filters(release: Path, df: pd.DataFrame) -> list[Result]:
     ]
 
 
-def check_load_dataset(release: Path, df: pd.DataFrame) -> Result:
-    """Load the release the way a user would.
+def check_load_dataset(release: Path) -> Result:
+    """Load every split of the release the way a user would, by streaming.
+
+    Streaming reads the Parquet shards directly and writes no Arrow cache, so it
+    checks the card's configuration, the feature types and the image decoding
+    without copying the whole dataset to disk. Row counts are checked against the
+    shards separately.
 
     Args:
         release: Release directory.
-        df: Released rows (for the expected counts).
 
     Returns:
-        Passes if counts, feature types and a decoded example are right.
+        Passes if every split yields a correctly typed, decodable example.
     """
-    ds = load_dataset(str(release))
-    expected = {"train": "train", "validation": "val", "test": "test"}
-    counts_ok = all(
-        len(ds[k]) == int((df["split"] == v).sum()) for k, v in expected.items()
-    )
-    row = ds["test"][0]
-    sample_ok = (
-        np.asarray(row["sar"]).shape == _IMG
-        and np.asarray(row["optical"]).shape == _IMG
-        and len(row["meta"]) == _META_LEN
-        and ds["test"].features["orbit"].names == ["asc", "desc"]
-    )
+    ds = load_dataset(str(release), streaming=True)
+    problems = []
+    for split in ("train", "validation", "test"):
+        row = next(iter(ds[split]))
+        features = ds[split].features
+        ok = (
+            np.asarray(row["sar"]).shape == _IMG
+            and np.asarray(row["optical"]).shape == _IMG
+            and len(row["meta"]) == _META_LEN
+            and features is not None
+            and features["orbit"].names == ["asc", "desc"]
+        )
+        if not ok:
+            problems.append(split)
     return Result(
-        "load_dataset",
-        counts_ok and sample_ok,
-        f"{ {k: len(v) for k, v in ds.items()} }",
+        "load_dataset (streaming)", not problems, f"bad splits: {problems}"
     )
 
 
@@ -533,11 +613,12 @@ def write_report(release: Path, results: list[Result]) -> None:
     lines = [
         "# Acceptance report",
         "",
-        "| Check | Result | Detail |",
-        "|---|---|---|",
+        "| Check | Result | Seconds | Detail |",
+        "|---|---|---|---|",
     ]
     lines += [
-        f"| {r.name} | {'PASS' if r.passed else 'FAIL'} | {r.detail} |"
+        f"| {r.name} | {'PASS' if r.passed else 'FAIL'} | {r.seconds} |"
+        f" {r.detail} |"
         for r in results
     ]
     out = release / "docs" / "acceptance_report.md"
@@ -545,11 +626,11 @@ def write_report(release: Path, results: list[Result]) -> None:
 
 
 def main() -> None:
-    """Run every check and exit non-zero if one fails."""
+    """Run every check, time each one, and exit non-zero on a failure."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("release", type=Path)
     parser.add_argument("--min-test", type=int, default=20_000)
-    parser.add_argument("--min-val", type=int, default=3_000)
+    parser.add_argument("--min-val", type=int, default=10_000)
     parser.add_argument("--min-train", type=int, default=100_000)
     parser.add_argument("--max-fid-floor", type=float, default=50.0)
     parser.add_argument("--skip-load-dataset", action="store_true")
@@ -557,16 +638,24 @@ def main() -> None:
     release = Path(args.release)
 
     df = load_table(release)
-    results = [check_manifest(release), check_counts(df, args), *check_rows(df)]
-    results += [check_leakage(df), check_mix(df), check_caps(df)]
-    results += check_images_and_filters(release, df)
-    results += check_card_and_files(release, df)
-    results.append(check_stats(release, args.max_fid_floor))
+    steps = [
+        partial(check_manifest, release),
+        partial(check_counts, df, args),
+        partial(check_rows, df),
+        partial(check_leakage, df),
+        partial(check_mix, df),
+        partial(check_caps, df),
+        partial(check_images_and_filters, release, df),
+        partial(check_card_and_files, release, df),
+        partial(check_stats, release, args.max_fid_floor),
+    ]
     if not args.skip_load_dataset:
-        results.append(check_load_dataset(release, df))
+        steps.append(partial(check_load_dataset, release))
+    results = [r for step in steps for r in timed(step)]
     write_report(release, results)
     for r in results:
-        print(f"{'PASS' if r.passed else 'FAIL'}  {r.name}: {r.detail}")
+        verdict = "PASS" if r.passed else "FAIL"
+        print(f"{verdict}  {r.name} [{r.seconds}s]: {r.detail}")
     sys.exit(0 if all(r.passed for r in results) else 1)
 
 

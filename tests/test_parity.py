@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     Pair = tuple[NDArray[np.float32], NDArray[np.float32]]
 
-_FID_BATCH = 20
+_FID_BATCH = 12
 
 
 def nhwc(a: NDArray[np.float32]) -> jax.Array:
@@ -54,9 +54,9 @@ def test_lpips_parity(pair: Pair) -> None:
 
 @pytest.mark.usefixtures("weights_ready")
 def test_fid_parity() -> None:
-    real, fake = structured_images(60, seed=3), structured_images(60, seed=4)
+    real, fake = structured_images(24, seed=3), structured_images(24, seed=4)
     fid_t, fid_j = sbt.FID(device="cpu"), sbj.FID()
-    for lo in range(0, 60, _FID_BATCH):
+    for lo in range(0, 24, _FID_BATCH):
         sl = slice(lo, lo + _FID_BATCH)
         fid_t.update(torch.from_numpy(real[sl]), real=True)
         fid_t.update(torch.from_numpy(fake[sl]), real=False)

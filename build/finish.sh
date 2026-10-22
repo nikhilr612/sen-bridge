@@ -40,7 +40,7 @@ git add docs/thresholds.json && git commit -q -m "Freeze thresholds for the rele
 
 step "package"
 rm -rf "$REL"
-$PY build/package.py "$BUILD" "$CAND" "$REL" --target 150000 --test 20000 --val 5000
+$PY build/package.py "$BUILD" "$CAND" "$REL" --target 155000 --test 20000 --val 10000
 
 step "FID statistics"
 $PY scripts/make_fid_stats.py "$REL" "$REL/stats"
@@ -54,7 +54,7 @@ rm -rf "$HF_DATASETS_CACHE"
 
 step "determinism: package again, compare checksums"
 rm -rf "${REL}_b"
-$PY build/package.py "$BUILD" "$CAND" "${REL}_b" --target 150000 --test 20000 --val 5000 >/dev/null
+$PY build/package.py "$BUILD" "$CAND" "${REL}_b" --target 155000 --test 20000 --val 10000 >/dev/null
 if diff -q "$REL/MANIFEST.sha256" "${REL}_b/MANIFEST.sha256" >/dev/null; then
   echo "DETERMINISTIC: identical checksums for $(wc -l < "$REL/MANIFEST.sha256") files"
 else

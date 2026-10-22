@@ -83,17 +83,18 @@ All constants (frozen in `docs/thresholds.json`):
 ## Splits
 
 Whole 1x1-degree cells (a stand-in for SSL4EO's seed-city clusters, which are not
-shipped) go to one split. Within each region and hemisphere, cells are drawn at
-random for test, then validation, until each holds its share of that stratum's rows
-(a quota in rows, not cells, because cells differ in size), and the rest are train.
-The test set is then chosen first (20,000 crops), every validation and train crop
-within 5 km of it is dropped, validation is chosen next (5,000 crops) and train
+shipped) go to one split. Within each region, hemisphere and latitude band (0-20,
+20-30, 30-40, 40-50 and 50+ degrees, a climate stand-in), cells are drawn at random
+for test, then validation, until each holds its share of that stratum's rows (a
+quota in rows, not cells, because cells differ in size), and the rest are train. The
+test set is then chosen first ({test:,} crops), every validation and train crop
+within 5 km of it is dropped, validation is chosen next ({val:,} crops) and train
 crops within 5 km of it are dropped, and train is chosen last. Each split is sampled
-to match the dataset's regional mix, so the test set's size and composition never
-depend on the other splits and no crop in one split is within 5 km of a crop in
-another. Crops that are over 90% water and crops that are at least 50% bare ground
-are capped at 10% and 8% of every split, exactly. Compute FID against the test
-targets only, and select checkpoints on validation.
+to match the dataset's mix of region, hemisphere and latitude band, so the test
+set's size and composition never depend on the other splits and no crop in one split
+is within 5 km of a crop in another. Crops that are over 90% water and crops that
+are at least 50% bare ground are capped at 10% and 8% of every split, exactly.
+Compute FID against the test targets only, and select checkpoints on validation.
 
 ## Quality: what was checked
 

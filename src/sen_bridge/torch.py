@@ -421,6 +421,10 @@ class _FIDInception(nn.Module):
         return x.mean((2, 3))
 
 
+#: One Inception network per device, shared by every FID accumulator.
+_inception_nets: dict[torch.device, _FIDInception] = {}
+
+
 class FID:
     """Accumulator over real and generated images.
 
@@ -483,7 +487,10 @@ class FID:
             Features of shape ``[B, 2048]`` in float64.
         """
         if self._net is None:
-            self._net = _FIDInception().to(self.device)
+            net = _inception_nets.get(self.device)
+            if net is None:
+                net = _inception_nets[self.device] = _FIDInception().to(self.device)
+            self._net = net
         u8 = torch.round((images.clamp(-1, 1) + 1) * _HALF_RANGE).to(torch.uint8)
         resized = resize_batch(u8.permute(0, 2, 3, 1).cpu().numpy())
         x = (
