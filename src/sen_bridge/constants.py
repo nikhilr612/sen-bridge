@@ -11,7 +11,8 @@ OPT_GAMMA = 1 / 2.2
 S2_SCALE = 10000.0
 
 MAX_DT_HOURS = 48.0
-CLOUD_MAX_FRAC = 0.01
+CLOUD_MAX_FRAC = 0.01  # SEnSeI cloud/shadow fraction per crop
+CLOUD_RULE_REJECT = 0.5  # spectral rule is a score; only opaque cover rejects (urban/sand trip it)
 BORDER_DB = -35.0
 BORDER_MAX_FRAC = 0.01
 WATER_DB = -18.0

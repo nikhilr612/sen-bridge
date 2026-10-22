@@ -44,11 +44,6 @@ def rfi_streaks(sar_db: np.ndarray, z: float = 6.0) -> bool:
     return False
 
 
-def cloud_frac_scl(scl: np.ndarray) -> float:
-    """Fraction of cloud (8,9,10 = med/high prob, cirrus) and shadow (3) in an SCL crop."""
-    return float(np.isin(scl, (3, 8, 9, 10)).mean())
-
-
 def flags(sar_db: np.ndarray, dem: np.ndarray | None = None) -> dict:
     out = {
         "water_frac_sar": float((sar_db[0] < C.WATER_DB).mean()),
@@ -63,3 +58,40 @@ def flags(sar_db: np.ndarray, dem: np.ndarray | None = None) -> dict:
 
 def steep(slope_std: float) -> bool:
     return slope_std > C.SLOPE_STD_MAX
+
+
+B01, B02, B03, B04, B8A_, B11 = 0, 1, 2, 3, 8, 10  # indices into the 12-band L2A stack
+
+
+def spectral_scores(rho12: np.ndarray) -> dict:
+    """Fractions on a [12,H,W] reflectance crop; rules fixed before freeze.
+
+    cloud_rule_frac: bright, flat-spectrum pixels (not snow). Also fires on roofs and pale sand,
+    so it is a score, not a filter, except for near-total cover.
+    snow:  bright green and NDSI > 0.4.
+    haze:  mean B01/B02 reflectance ratio; aerosol and thin cloud lift the coastal band.
+    """
+    g, sw = rho12[B03], rho12[B11]
+    ndsi = (g - sw) / np.maximum(g + sw, 1e-6)
+    blue, red = rho12[B02], rho12[B04]
+    snow = (ndsi > 0.4) & (g > 0.3)
+    cloud = (blue > 0.15) & (red > 0.15) & (np.abs(red - blue) < 0.08) & ~snow
+    return {
+        "cloud_rule_frac": float(cloud.mean()),
+        "snow_score": float(snow.mean()),
+        "haze_score": float(rho12[B01].mean() / max(blue.mean(), 1e-6)),
+    }
+
+
+SENSEI_CLOUD = (3, 4, 5)  # thin cloud, thick cloud, cloud shadow
+SENSEI_NODATA = 6
+
+
+def sensei_fracs(mask: np.ndarray) -> dict:
+    """Fractions from SSL4EO's neural mask on the 128x128 crop; filtering only, never pairing."""
+    return {
+        "sensei_cloud_frac": float(np.isin(mask, SENSEI_CLOUD).mean()),
+        "sensei_nodata_frac": float((mask == SENSEI_NODATA).mean()),
+        "water_frac_opt": float((mask == 1).mean()),
+        "snow_frac_opt": float((mask == 2).mean()),
+    }

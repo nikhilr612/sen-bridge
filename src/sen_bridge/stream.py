@@ -77,8 +77,11 @@ def tar_index(remote: Remote, cache_dir: Path | None = None) -> dict:
 class RangeView(io.RawIOBase):
     """Read-only window [offset, offset+size) of a Remote, so zipfile can seek in it."""
 
+    BLOCK = 65536
+
     def __init__(self, remote, offset, size):
         self.remote, self.base, self.size, self.pos = remote, offset, size, 0
+        self._blk = (0, b"")  # (start, bytes): one read-ahead block, saves round trips
 
     def readable(self): return True
     def seekable(self): return True
@@ -92,7 +95,15 @@ class RangeView(io.RawIOBase):
         n = self.size - self.pos if n < 0 else min(n, self.size - self.pos)
         if n <= 0:
             return b""
-        b = self.remote.get(self.base + self.pos, self.base + self.pos + n)
+        lo, blk = self._blk
+        if not (lo <= self.pos and self.pos + n <= lo + len(blk)):
+            if self.pos + max(n, self.BLOCK) >= self.size:
+                start, end = max(0, min(self.pos, self.size - self.BLOCK)), self.size  # tail block
+            else:
+                start, end = self.pos, self.pos + max(n, self.BLOCK)
+            blk = self.remote.get(self.base + start, self.base + end)
+            self._blk, lo = (start, blk), start
+        b = blk[self.pos - lo:self.pos - lo + n]
         self.pos += len(b)
         return b
 
@@ -105,11 +116,17 @@ class RangeView(io.RawIOBase):
 class Sample:
     """One sample's zarr-zip; read arrays chunk by chunk."""
 
+    _meta: dict = {}  # (modality, array) -> .zarray; identical across samples
+
     def __init__(self, remote, offset, size):
+        self.modality = remote.name.split("/")[1]
         self.zip = zipfile.ZipFile(RangeView(remote, offset, size))
 
     def attrs(self, name):
-        return json.loads(self.zip.read(f"{name}/.zarray"))
+        key = (self.modality, name)
+        if key not in self._meta:
+            self._meta[key] = json.loads(self.zip.read(f"{name}/.zarray"))
+        return self._meta[key]
 
     def chunk(self, array: str, index: str) -> np.ndarray:
         """Decode one chunk, e.g. chunk('bands', '1.0.0.0') -> [1,12,264,264]."""
@@ -117,6 +134,17 @@ class Sample:
         meta = self.attrs(array)
         raw = Blosc().decode(self.zip.read(f"{array}/{index}"))
         return np.frombuffer(raw, dtype=meta["dtype"]).reshape(meta["chunks"])
+
+    def s2_all(self, season: int) -> np.ndarray:
+        """All 12 L2A bands for one season, [12,264,264] int16 (B01,B02,B03,B04,B05,B06,B07,B08,B8A,B09,B11,B12)."""
+        return self.chunk("bands", f"{season}.0.0.0")[0]
+
+    def cloud_mask(self, season: int) -> np.ndarray:
+        """SSL4EO's own (SEnSeI v2, neural) mask, [264,264] uint8.
+
+        Classes: 0 land, 1 water, 2 snow, 3 thin cloud, 4 thick cloud, 5 cloud shadow, 6 no data.
+        """
+        return self.chunk("cloud_mask", f"{season}.0.0")[0]
 
     def s2_rgb(self, season: int) -> np.ndarray:
         """B4,B3,B2 digital numbers for one season: [3,264,264] (band order B01,B02,B03,B04,...)."""
