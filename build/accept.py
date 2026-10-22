@@ -656,7 +656,12 @@ def main() -> None:
     for r in results:
         verdict = "PASS" if r.passed else "FAIL"
         print(f"{verdict}  {r.name} [{r.seconds}s]: {r.detail}")
-    sys.exit(0 if all(r.passed for r in results) else 1)
+    code = 0 if all(r.passed for r in results) else 1
+    sys.stdout.flush()
+    # Streaming ``load_dataset`` leaves non-daemon background threads that keep the
+    # interpreter alive after ``sys.exit``; every result is printed and flushed, so
+    # exit directly.
+    os._exit(code)
 
 
 if __name__ == "__main__":

@@ -49,7 +49,7 @@ step "dataset card"
 $PY build/card.py "$REL"
 
 step "acceptance tests"
-$PY build/accept.py "$REL"
+timeout 900 $PY build/accept.py "$REL"
 rm -rf "$HF_DATASETS_CACHE"
 
 step "determinism: package again, compare checksums"
