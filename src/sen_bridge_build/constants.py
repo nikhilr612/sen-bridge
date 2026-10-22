@@ -99,3 +99,9 @@ CLEAN_WATER_LULC = 0.5
 #: Mean luminance range of a ``clean`` crop (exclusive): neither dark nor
 #: washed out.
 CLEAN_MEAN_RANGE = (0.10, 0.80)
+
+#: Edges, in degrees of absolute latitude, of the climate bands used to stratify the
+#: splits (a Koppen-style stand-in: tropics, subtropics, two temperate bands, high
+#: latitudes). The 1-degree clusters align with every edge, so none straddles a
+#: band.
+LAT_BAND_EDGES = (20, 30, 40, 50)

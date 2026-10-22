@@ -27,6 +27,19 @@ REGIONS = (
 )
 
 
+def latitude_band(lat: pd.Series) -> pd.Series:
+    """Give each location its climate band, from 0 (tropics) to 4 (high latitudes).
+
+    Args:
+        lat: Latitudes in degrees.
+
+    Returns:
+        Integer band of ``abs(lat)`` against :data:`constants.LAT_BAND_EDGES`.
+    """
+    band = np.digitize(lat.abs().to_numpy(), constants.LAT_BAND_EDGES)
+    return pd.Series(band, index=lat.index, name="latband")
+
+
 def region_of(lat: float, lon: float) -> str:
     """Name the coarse region of a location.
 

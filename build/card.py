@@ -82,7 +82,7 @@ All constants (frozen in `docs/thresholds.json`):
 
 ## Splits
 
-Whole 2x2-degree cells (a stand-in for SSL4EO's seed-city clusters, which are not
+Whole 1x1-degree cells (a stand-in for SSL4EO's seed-city clusters, which are not
 shipped) go to one split. Within each region and hemisphere, cells are drawn at
 random for test, then validation, until each holds its share of that stratum's rows
 (a quota in rows, not cells, because cells differ in size), and the rest are train.

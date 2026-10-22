@@ -84,8 +84,8 @@ _CANDIDATE_COLUMNS = [
 _CHOICE_ORDER = ("test", "val", "train")
 #: Pool sizes as a multiple of the target: room for the caps and the 5 km drops.
 _TEST_POOL_MARGIN = 1.25
-_VAL_POOL_MARGIN = 1.5
-_CELL_DEG = 2  # clusters are 2x2 degree cells (the seed-city list is not shipped)
+_VAL_POOL_MARGIN = 2.5
+_CELL_DEG = 1  # clusters are 1x1 degree cells (the seed-city list is not shipped)
 _CELL_STRIDE = 1000
 _ROW_GROUP = 100
 _HOURS_PER_DAY = 24
@@ -135,7 +135,9 @@ def kept_examples(results: pd.DataFrame, candidates: pd.DataFrame) -> pd.DataFra
     cell_lat = np.floor(df["lat"] / _CELL_DEG).astype(int)
     cell_lon = np.floor(df["lon"] / _CELL_DEG).astype(int)
     df["cluster_id"] = cell_lat * _CELL_STRIDE + cell_lon
-    df["stratum"] = df["region"] + np.where(df["lat"] >= 0, "_N", "_S")
+    hemisphere = np.where(df["lat"] >= 0, "_N", "_S")
+    band = splits.latitude_band(df["lat"]).astype(str)
+    df["stratum"] = df["region"] + hemisphere + "_L" + band
     return cast("pd.DataFrame", df.reset_index(drop=True))  # stubs lose the type
 
 
@@ -160,7 +162,7 @@ def select_release(
         The chosen rows, and the number of rows dropped for distance, keyed
         ``<later split>_near_<chosen split>``.
     """
-    mix = df["region"].value_counts(normalize=True)
+    mix = df["stratum"].value_counts(normalize=True)
     share = {str(k): float(v) for k, v in mix.items()}  # the whole dataset's mix
     pools = {str(k): g for k, g in df.groupby("split")}
     chosen: dict[str, pd.DataFrame] = {}
@@ -169,7 +171,9 @@ def select_release(
         pool = pools[name]
         for member_of, cap in splits.CAPS:
             pool = splits.cap_share(pool, member_of(pool), cap, seed=seed)
-        chosen[name] = splits.select_capped(pool, target[name], share, seed)
+        chosen[name] = splits.select_capped(
+            pool, target[name], share, seed, region_col="stratum"
+        )
         for later in _CHOICE_ORDER[i + 1 :]:
             before = len(pools[later])
             pools[later] = splits.drop_within(pools[later], chosen[name])

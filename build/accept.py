@@ -34,7 +34,7 @@ from PIL import Image
 from scipy.spatial import cKDTree
 
 from sen_bridge.fid_core import frechet_distance, load_stats
-from sen_bridge_build import constants, filters
+from sen_bridge_build import constants, filters, splits
 from sen_bridge_build.sample import Record, reject_reason
 
 _IMG = (128, 128, 3)
@@ -46,9 +46,14 @@ _META_LEN = 7
 _EPS = 1e-3
 #: Largest allowed gap, in percentage points, between a split's regional share and
 #: the release's.
-_REGION_TOL = 1.0
+_MIX_TOL = 1.0
+#: The same for dimensions that are balanced but not stratified (orbit, season).
+_LOOSE_TOL = 3.0
+#: Day-of-year edges of the four seasons used for the mix check.
+_SEASON_EDGES = (0, 80, 172, 264, 366)
 _TABLE_COLUMNS = [
     "id",
+    "doy",
     "split",
     "cluster_id",
     "region",
@@ -226,27 +231,53 @@ def check_leakage(df: pd.DataFrame) -> Result:
     )
 
 
-def check_regions(df: pd.DataFrame) -> Result:
-    """Check that every split has the same regional mix as the whole release.
+def check_mix(df: pd.DataFrame) -> Result:
+    """Check each split has the release's mix of region, hemisphere, latitude, etc.
+
+    Region, hemisphere and latitude band are stratified, so their shares must agree
+    tightly. Orbit and season are not stratified, only balanced by the finer
+    clusters, so they get a looser tolerance.
 
     Args:
         df: Released rows.
 
     Returns:
-        Passes if no region's share in any split differs from its share in the
-        release by more than ``_REGION_TOL`` percentage points.
+        Passes if no share of any category in any split differs from its share in
+        the release by more than that dimension's tolerance, in percentage points.
     """
-    overall = df["region"].value_counts(normalize=True)
-    worst, where = 0.0, ""
-    for name, group in df.groupby("split"):
-        share = group["region"].value_counts(normalize=True).reindex(overall.index)
-        gap = (share.fillna(0) - overall).abs() * 100
-        if float(gap.max()) > worst:
-            worst, where = float(gap.max()), f"{name}/{gap.idxmax()}"
+    season = pd.cut(df["doy"], _SEASON_EDGES, labels=False)
+    keys = {
+        "region": (df["region"], _MIX_TOL),
+        "hemisphere": (
+            pd.Series(np.where(df["lat"] >= 0, "N", "S"), index=df.index),
+            _MIX_TOL,
+        ),
+        "latitude band": (splits.latitude_band(df["lat"]), _MIX_TOL),
+        "orbit": (df["orbit"], _LOOSE_TOL),
+        "season": (season, _LOOSE_TOL),
+    }
+    failures, worst = [], {}
+    for dimension, (values, tol) in keys.items():
+        overall = values.value_counts(normalize=True)
+        gap_max = 0.0
+        for name in df["split"].unique():
+            share = values[df["split"] == name].value_counts(normalize=True)
+            gap_max = max(
+                gap_max,
+                float(
+                    (
+                        (share.reindex(overall.index).fillna(0) - overall).abs()
+                        * 100
+                    ).max()
+                ),
+            )
+        worst[dimension] = round(gap_max, 2)
+        if gap_max > tol:
+            failures.append(dimension)
     return Result(
-        "regional mix per split",
-        worst <= _REGION_TOL,
-        f"largest deviation from the release mix: {worst:.2f} pts ({where or '-'})",
+        "mix per split (region, hemisphere, latitude, orbit, season)",
+        not failures,
+        f"largest gaps from the release mix (pts): {worst}; failing: {failures}",
     )
 
 
@@ -527,7 +558,7 @@ def main() -> None:
 
     df = load_table(release)
     results = [check_manifest(release), check_counts(df, args), *check_rows(df)]
-    results += [check_leakage(df), check_regions(df), check_caps(df)]
+    results += [check_leakage(df), check_mix(df), check_caps(df)]
     results += check_images_and_filters(release, df)
     results += check_card_and_files(release, df)
     results.append(check_stats(release, args.max_fid_floor))

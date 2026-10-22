@@ -60,6 +60,11 @@ def test_metadata_filter() -> None:
     assert ok.tolist() == [True, False, False, True]
 
 
+def test_latitude_band_uses_absolute_latitude_and_the_configured_edges() -> None:
+    lat = pd.Series([0.0, 19.9, 20.0, -29.9, 30.0, -45.0, 50.0, 80.0])
+    assert splits.latitude_band(lat).tolist() == [0, 0, 1, 1, 2, 3, 4, 4]
+
+
 def test_region_of_and_other() -> None:
     assert splits.region_of(50, 10) == "Europe"
     assert splits.region_of(-80, 0) == "Other"
