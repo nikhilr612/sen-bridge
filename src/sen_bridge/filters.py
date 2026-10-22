@@ -25,23 +25,37 @@ def invalid_pixels(sar_db: np.ndarray, opt_dn: np.ndarray) -> bool:
 
 
 def saturated(opt_rho: np.ndarray) -> bool:
-    return bool((opt_rho >= 1.0).any())
+    return bool((opt_rho >= 1.0).mean() > C.SAT_MAX_FRAC)
+
+
+def optical_stats(opt_u8: np.ndarray) -> dict:
+    """Brightness/flatness of the stored 8-bit RGB [3,H,W]. `flat_bright` is analysis-only:
+    it also fires on sand desert, a valid target, so it must never select examples."""
+    a = opt_u8.astype(np.float32) / 255
+    lum, mn = a.mean(0), a.min(0)
+    return {"opt_mean": float(lum.mean()), "opt_std": float(lum.std()), "opt_white_frac": float((mn > 0.85).mean()),
+            "flat_bright": bool(lum.std() < 0.04 and mn.mean() > 0.5)}
 
 
 def border_noise(sar_db: np.ndarray) -> bool:
     return bool((sar_db[0] < C.BORDER_DB).mean() > C.BORDER_MAX_FRAC)
 
 
-def rfi_streaks(sar_db: np.ndarray, z: float = 6.0) -> bool:
-    """Row/column streak detector: a row or column mean far from the robust median."""
+def rfi_score(sar_db: np.ndarray) -> float:
+    """Largest robust z-score of a row/column mean over both polarisations (needs a >3 dB offset)."""
+    worst = 0.0
     for ch in sar_db:
         for axis in (0, 1):
             m = ch.mean(axis=axis)
             med = np.median(m)
             mad = np.median(np.abs(m - med)) * 1.4826 + 1e-6
-            if (np.abs(m - med) / mad > z).any() and np.abs(m - med).max() > 3.0:
-                return True
-    return False
+            if np.abs(m - med).max() > 3.0:
+                worst = max(worst, float((np.abs(m - med) / mad).max()))
+    return worst
+
+
+def rfi_streaks(sar_db: np.ndarray, z: float = 6.0) -> bool:
+    return rfi_score(sar_db) > z
 
 
 def flags(sar_db: np.ndarray, dem: np.ndarray | None = None) -> dict:

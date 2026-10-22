@@ -7,6 +7,7 @@ the rule-based cloud test below is what decides inclusion. Nothing but the outpu
 """
 import argparse
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -18,6 +19,17 @@ from PIL import Image
 from sen_bridge import constants as C, filters, preprocess as P, stream
 
 COMMIT = "97a91733db962222e1e6b40a836845ddbbb16b86"
+
+
+REJECT_CAP = 150  # saved example images per rejection reason, for the audit
+_saved, _lock = {}, threading.Lock()
+
+
+def _save(out: Path, sub: str, id_: str, sar_u8, opt_u8):
+    for name, arr in (("sar", sar_u8), ("optical", opt_u8)):
+        d = out / sub / name if sub else out / name
+        d.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(arr.transpose(1, 2, 0)).save(d / f"{id_}.png")
 
 
 def process(row, remotes, index, out: Path):
@@ -32,29 +44,42 @@ def process(row, remotes, index, out: Path):
     mask = P._center_crop(s2.cloud_mask(row.season))[::2, ::2]  # same window, nearest-neighbour to 128
     dem = dem_s.dem()
     fl = filters.flags(sar, P._avg2(P._center_crop(dem)))
-    rec = {"id": row.id, **fl}
-    if filters.invalid_pixels(sar, dn):
-        return rec, "invalid_pixels"
-    if filters.saturated(rho):
-        return rec, "saturated"
-    rec.update(filters.spectral_scores(rho12), **filters.sensei_fracs(mask))
-    if rec["sensei_cloud_frac"] >= C.CLOUD_MAX_FRAC:
-        return rec, "cloud_shadow"
-    if rec["cloud_rule_frac"] >= C.CLOUD_RULE_REJECT:
-        return rec, "cloud_opaque"
-    if rec["sensei_nodata_frac"] > 0:
-        return rec, "invalid_pixels"
-    if filters.border_noise(sar):
-        return rec, "border_noise"
-    if filters.rfi_streaks(sar):
-        return rec, "rfi"
-    if filters.steep(fl["slope_std"]):
-        return rec, "steep"
-    if fl["elev_mean"] > C.ELEV_MAX_M:
-        return rec, "elevation"
-    for sub, arr in (("sar", P.sar_to_uint8(sar)), ("optical", P.opt_to_uint8(rho))):
-        Image.fromarray(arr.transpose(1, 2, 0)).save(out / sub / f"{row.id}.png", optimize=False)
-    return rec, None
+    rec = {"id": row.id, **fl, **filters.spectral_scores(rho12), **filters.sensei_fracs(mask),
+           "rfi_score": filters.rfi_score(sar), "sat_frac": float((rho >= 1.0).mean()),
+           **filters.optical_stats(P.opt_to_uint8(rho)),
+           "border_frac": float((sar[0] < C.BORDER_DB).mean())}
+
+    why = None
+    if filters.invalid_pixels(sar, dn) or rec["sensei_nodata_frac"] > 0:
+        why = "invalid_pixels"
+    elif filters.saturated(rho):
+        why = "saturated"
+    elif rec["sensei_cloud_frac"] >= C.CLOUD_MAX_FRAC:
+        why = "cloud_shadow"
+    elif rec["cloud_rule_frac"] >= C.CLOUD_RULE_REJECT:
+        why = "cloud_opaque"
+    elif rec["opt_white_frac"] >= C.WHITE_MAX_FRAC and rec["opt_std"] < C.WHITE_FLAT_STD:
+        why = "overexposed"
+    elif rec["opt_mean"] < C.DARK_MEAN_MIN:
+        why = "too_dark"
+    elif filters.border_noise(sar):
+        why = "border_noise"
+    elif rec["rfi_score"] > C.RFI_Z:
+        why = "rfi"
+    elif filters.steep(fl["slope_std"]):
+        why = "steep"
+    elif fl["elev_mean"] > C.ELEV_MAX_M:
+        why = "elevation"
+
+    sar_u8, opt_u8 = P.sar_to_uint8(sar), P.opt_to_uint8(rho)
+    if why is None:
+        _save(out, "", row.id, sar_u8, opt_u8)
+    else:
+        with _lock:
+            n = _saved[why] = _saved.get(why, 0) + 1
+        if n <= REJECT_CAP:
+            _save(out, f"rejects/{why}", row.id, sar_u8, opt_u8)
+    return rec, why
 
 
 def main():

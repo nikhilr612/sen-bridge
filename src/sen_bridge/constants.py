@@ -11,10 +11,10 @@ OPT_GAMMA = 1 / 2.2
 S2_SCALE = 10000.0
 
 MAX_DT_HOURS = 48.0
-CLOUD_MAX_FRAC = 0.01  # SEnSeI cloud/shadow fraction per crop
+CLOUD_MAX_FRAC = 0.05  # SEnSeI cloud/shadow fraction per crop (audit: <6% all fine, >=9% mostly bad)
 CLOUD_RULE_REJECT = 0.5  # spectral rule is a score; only opaque cover rejects (urban/sand trip it)
 BORDER_DB = -35.0
-BORDER_MAX_FRAC = 0.01
+BORDER_MAX_FRAC = 0.10  # audit: 10/11 rejects at 1% were good dark/water pairs
 WATER_DB = -18.0
 WATER_CROP_FRAC = 0.90
 WATER_SPLIT_CAP = 0.10
@@ -23,3 +23,9 @@ SLOPE_STD_MAX = 15.0  # placeholder, to be fixed by the pilot audit before freez
 ELEV_MAX_M = 2000.0
 SNOW_LAT = 40.0
 SPLIT_MIN_DIST_KM = 5.0
+RFI_Z = 20.0  # audit: 19/20 rejects at z>6 were good; the one bad pair scored 37
+SAT_MAX_FRAC = 0.01  # share of optical pixels with reflectance >= 1.0
+WHITE_MAX_FRAC = 0.40  # share of near-white pixels (min channel > 0.85) ...
+WHITE_FLAT_STD = 0.03  # ... counted only if also featureless: bad whites std<=0.02, textured sand/snow/roofs >=0.06
+DARK_MEAN_MIN = 0.08  # mean luminance of the 8-bit optical; bad 0.03-0.064, dimmest good crop seen 0.094
+
