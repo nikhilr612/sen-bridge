@@ -13,10 +13,6 @@ from scipy.spatial import cKDTree
 from sen_bridge_build import constants
 
 _EARTH_RADIUS_KM = 6371.0
-#: Default shares of clusters assigned to train, validation and test.
-_DEFAULT_FRACTIONS = (0.835, 0.033, 0.132)
-#: Margin above its pre-filter share that a region may take in the downsample.
-_REGION_SLACK = 0.03
 
 #: Coarse region boxes as (name, lat_min, lat_max, lon_min, lon_max). The first
 #: match wins.
@@ -82,32 +78,49 @@ def assign_clusters(df: pd.DataFrame, seeds: pd.DataFrame) -> pd.Series:
 
 def assign_splits(
     df: pd.DataFrame,
-    fractions: tuple[float, float, float] = _DEFAULT_FRACTIONS,
+    test_rows: int,
+    val_rows: int,
     seed: int = 0,
 ) -> pd.Series:
-    """Assign whole clusters to train, validation or test by ``stratum``.
+    """Assign whole clusters to test, then validation, then train, by row quota.
+
+    Within each ``stratum`` (region and hemisphere), clusters are taken at random
+    for test until the stratum holds its share of ``test_rows``, then for validation
+    until it holds its share of ``val_rows``; the rest go to train. Quotas are
+    counted in rows, not clusters, because clusters differ in size and a quota in
+    clusters rounds badly in small strata. Every split therefore matches the
+    dataset's regional mix to within one cluster's worth of rows.
 
     Args:
         df: Rows with ``cluster_id`` and ``stratum`` columns.
-        fractions: Shares of clusters per stratum for train, validation and test;
-            only the last two are used, the rest of the clusters go to train.
+        test_rows: Wanted size of the test pool over the whole dataset.
+        val_rows: Wanted size of the validation pool over the whole dataset.
         seed: Seed of the random assignment.
 
     Returns:
         Series named ``split`` with values ``"train"``, ``"val"`` or ``"test"``.
     """
     rng = np.random.default_rng(seed)
-    out = pd.Series("train", index=df.index, name="split")
-    clusters = df.drop_duplicates("cluster_id")[["cluster_id", "stratum"]]
-    for _, group in clusters.groupby("stratum"):
-        ids = rng.permutation(group["cluster_id"].to_numpy())
-        n_val, n_test = (
-            round(len(ids) * fractions[1]),
-            round(len(ids) * fractions[2]),
-        )
-        out[df["cluster_id"].isin(ids[:n_val])] = "val"
-        out[df["cluster_id"].isin(ids[n_val : n_val + n_test])] = "test"
-    return out
+    size = df.groupby("cluster_id").size()
+    stratum = df.drop_duplicates("cluster_id").set_index("cluster_id")["stratum"]
+    owner: dict[int, str] = {}
+    for _, members in stratum.groupby(stratum):
+        ids = rng.permutation(members.index.to_numpy())
+        share = int(size.loc[ids].sum()) / len(df)
+        taken = 0
+        for name, rows in (("test", test_rows), ("val", val_rows)):
+            have = 0
+            # Take a cluster only if it brings the total closer to the quota, so the
+            # rounding errors of the strata average out instead of all overshooting.
+            while (
+                taken < len(ids)
+                and have + int(size.loc[ids[taken]]) / 2 < rows * share
+            ):
+                owner[int(ids[taken])] = name
+                have += int(size.loc[ids[taken]])
+                taken += 1
+    split = df["cluster_id"].map(owner).fillna("train")
+    return pd.Series(split.to_numpy(), index=df.index, name="split")
 
 
 def drop_within(
@@ -142,19 +155,23 @@ def stratified_downsample(
     df: pd.DataFrame,
     n: int,
     region_col: str = "region",
-    pre_share: dict[str, float] | None = None,
+    target_share: dict[str, float] | None = None,
     seed: int = 0,
 ) -> pd.DataFrame:
-    """Sample ``n`` rows, capping each region at its pre-filter share plus 3 points.
+    """Sample ``n`` rows so that each region gets its share of the sample.
 
-    If the caps cannot reach ``n`` they are relaxed to the available counts.
+    Each region first receives ``floor(share * n)`` rows (or all it has). The
+    shortfall goes, one row at a time, to the region furthest below its share that
+    still has rows left. A region short of rows is therefore under-represented,
+    never over-represented, and the sample still has ``n`` rows.
 
     Args:
         df: Rows to sample from.
         n: Number of rows wanted. If the frame is not larger, it is returned
             unchanged.
         region_col: Column holding the region of each row.
-        pre_share: Pre-filter share of each region. Defaults to the current shares.
+        target_share: Wanted share of each region, summing to about 1. Defaults to
+            the shares in ``df``.
         seed: Seed of the random sample.
 
     Returns:
@@ -163,26 +180,18 @@ def stratified_downsample(
     rng = np.random.default_rng(seed)
     if len(df) <= n:
         return df
-    share = pre_share or df[region_col].value_counts(normalize=True).to_dict()
-    caps = {
-        r: int(np.floor((share.get(r, 0) + _REGION_SLACK) * n))
-        for r in df[region_col].unique()
-    }
     avail = df[region_col].value_counts()
-    take = {r: min(int(avail[r]), caps[r]) for r in avail.index}
-    while sum(take.values()) < n:  # hand out the shortfall one row at a time
-        room = {r: min(int(avail[r]), caps[r]) - take[r] for r in take}
-        room = {r: v for r, v in room.items() if v > 0}
-        if not room:
-            caps = {
-                r: int(avail[r]) for r in avail.index
-            }  # caps infeasible: relax them
-            continue
-        take[max(room, key=lambda r: room[r])] += 1
+    counts = {str(r): int(c) for r, c in avail.items()}
+    share = target_share or {r: c / len(df) for r, c in counts.items()}
+    want = {r: share.get(r, 0.0) * n for r in counts}
+    take = {r: min(counts[r], int(np.floor(want[r]))) for r in counts}
     while sum(take.values()) > n:
         take[max(take, key=lambda r: take[r])] -= 1
+    while sum(take.values()) < n:
+        open_regions = [r for r in counts if take[r] < counts[r]]
+        take[max(open_regions, key=lambda r: want[r] - take[r])] += 1
     parts = [
-        g.iloc[rng.permutation(len(g))[: take[r]]]
+        g.iloc[rng.permutation(len(g))[: take[str(r)]]]
         for r, g in df.groupby(region_col)
     ]
     # pandas-stubs lose the DataFrame type through ``concat``.
@@ -272,6 +281,7 @@ CAPS = (
 def select_capped(
     pool: pd.DataFrame,
     n: int,
+    target_share: dict[str, float],
     seed: int = 0,
     region_col: str = "region",
 ) -> pd.DataFrame:
@@ -285,6 +295,8 @@ def select_capped(
     Args:
         pool: Candidate rows.
         n: Number of rows wanted. If the pool is not larger, all of it is returned.
+        target_share: Wanted share of each region (the whole dataset's regional
+            mix).
         seed: Seed of every random choice.
         region_col: Column holding the region of each row.
 
@@ -292,9 +304,7 @@ def select_capped(
         The chosen rows.
     """
     rng = np.random.default_rng(seed)
-    shares = pool[region_col].value_counts(normalize=True)
-    pre_share = {str(k): float(v) for k, v in shares.items()}
-    chosen = stratified_downsample(pool, n, region_col, pre_share, seed)
+    chosen = stratified_downsample(pool, n, region_col, target_share, seed)
     rest = pool.drop(index=chosen.index)
     for member_of, cap in CAPS:
         flag = member_of(chosen)

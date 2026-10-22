@@ -14,6 +14,7 @@ from sen_bridge_build import filters, meta, preprocess, splits
 from sen_bridge_build.sample import Record, reject_reason
 
 _SIZE = 264
+_SHARE = {"A": 0.6, "B": 0.3, "C": 0.1}  # the regional mix that _pool draws from
 
 
 def test_sar_roundtrip_and_shapes() -> None:
@@ -72,10 +73,28 @@ def test_splits_and_downsample() -> None:
     })
     df["cluster_id"] = splits.assign_clusters(df, df.sample(50, random_state=0))
     df["stratum"] = np.where(df["lat"] > 0, "N", "S")
-    df["split"] = splits.assign_splits(df)
+    df["split"] = splits.assign_splits(df, test_rows=300, val_rows=100)
     assert (df.groupby("cluster_id")["split"].nunique() <= 2).all()
     df["region"] = rng.choice(list("ABC"), len(df), p=[0.6, 0.3, 0.1])
     assert len(splits.stratified_downsample(df, 500)) == 500
+
+
+def test_assign_splits_matches_row_quotas_and_the_stratum_mix() -> None:
+    rng = np.random.default_rng(2)
+    n = 20_000
+    df = pd.DataFrame({"cluster_id": rng.integers(0, 400, n)})
+    df["stratum"] = np.where(df["cluster_id"] % 5 == 0, "small", "big")
+    split = splits.assign_splits(df, test_rows=3000, val_rows=1000)
+    counts = split.value_counts()
+    # quotas are met to within about one cluster (50 rows) per stratum
+    assert abs(counts["test"] - 3000) <= 150
+    assert abs(counts["val"] - 1000) <= 150
+    # a whole cluster is never split across two splits
+    first = df.assign(s=split).groupby("cluster_id")["s"].transform("first")
+    assert (first == split).all()
+    # each stratum holds its proportional share of the test pool
+    small = (split[df["stratum"] == "small"] == "test").sum() / counts["test"]
+    assert small == pytest.approx((df["stratum"] == "small").mean(), abs=0.03)
 
 
 def test_drop_within_removes_only_rows_near_the_reference() -> None:
@@ -110,9 +129,27 @@ def _pool(n: int, seed: int = 0) -> pd.DataFrame:
     })
 
 
+def test_stratified_downsample_matches_the_target_mix() -> None:
+    pool = _pool(10_000)
+    target = {"A": 0.5, "B": 0.4, "C": 0.1}  # differs from the pool's 60/30/10
+    chosen = splits.stratified_downsample(pool, 1000, target_share=target, seed=1)
+    shares = chosen["region"].value_counts(normalize=True)
+    for region, want in target.items():
+        assert shares[region] == pytest.approx(want, abs=0.002)
+    assert len(chosen) == 1000
+
+
+def test_stratified_downsample_under_represents_a_short_region() -> None:
+    pool = _pool(10_000)
+    pool = pool[(pool["region"] != "C") | (pool.index % 50 == 0)]  # C nearly absent
+    chosen = splits.stratified_downsample(pool, 1000, target_share=_SHARE)
+    assert len(chosen) == 1000
+    assert (chosen["region"] == "C").sum() <= (pool["region"] == "C").sum()
+
+
 def test_select_capped_is_exact_in_size_and_caps() -> None:
     pool = _pool(5000)
-    chosen = splits.select_capped(pool, 1000, seed=3)
+    chosen = splits.select_capped(pool, 1000, _SHARE, seed=3)
     assert len(chosen) == 1000
     assert chosen.index.is_unique
     assert splits.is_water(chosen).sum() <= 0.10 * 1000
@@ -121,7 +158,7 @@ def test_select_capped_is_exact_in_size_and_caps() -> None:
 
 def test_select_capped_on_a_small_pool_obeys_the_caps_without_padding() -> None:
     pool = _pool(50)
-    chosen = splits.select_capped(pool, 1000)
+    chosen = splits.select_capped(pool, 1000, _SHARE)
     assert len(chosen) <= 50  # never more rows than the pool holds
     assert splits.is_water(chosen).sum() <= 0.10 * len(chosen)
 

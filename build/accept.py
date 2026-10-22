@@ -44,6 +44,9 @@ _SIZE_CAP_GB = 16
 _BYTES_PER_GB = 1024**3
 _META_LEN = 7
 _EPS = 1e-3
+#: Largest allowed gap, in percentage points, between a split's regional share and
+#: the release's.
+_REGION_TOL = 1.0
 _TABLE_COLUMNS = [
     "id",
     "split",
@@ -220,6 +223,30 @@ def check_leakage(df: pd.DataFrame) -> Result:
         "5 km leakage guarantee",
         min(nearest.values()) >= constants.SPLIT_MIN_DIST_KM - _EPS,
         f"nearest cross-split distances in km: {nearest}",
+    )
+
+
+def check_regions(df: pd.DataFrame) -> Result:
+    """Check that every split has the same regional mix as the whole release.
+
+    Args:
+        df: Released rows.
+
+    Returns:
+        Passes if no region's share in any split differs from its share in the
+        release by more than ``_REGION_TOL`` percentage points.
+    """
+    overall = df["region"].value_counts(normalize=True)
+    worst, where = 0.0, ""
+    for name, group in df.groupby("split"):
+        share = group["region"].value_counts(normalize=True).reindex(overall.index)
+        gap = (share.fillna(0) - overall).abs() * 100
+        if float(gap.max()) > worst:
+            worst, where = float(gap.max()), f"{name}/{gap.idxmax()}"
+    return Result(
+        "regional mix per split",
+        worst <= _REGION_TOL,
+        f"largest deviation from the release mix: {worst:.2f} pts ({where or '-'})",
     )
 
 
@@ -500,7 +527,7 @@ def main() -> None:
 
     df = load_table(release)
     results = [check_manifest(release), check_counts(df, args), *check_rows(df)]
-    results += [check_leakage(df), check_caps(df)]
+    results += [check_leakage(df), check_regions(df), check_caps(df)]
     results += check_images_and_filters(release, df)
     results += check_card_and_files(release, df)
     results.append(check_stats(release, args.max_fid_floor))

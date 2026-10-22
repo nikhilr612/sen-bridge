@@ -37,7 +37,9 @@ def _world(n: int, seed: int = 0) -> pd.DataFrame:
     lat_cell = np.floor(df["lat"] * cell).astype(int)
     df["cluster_id"] = lat_cell * 100 + np.floor(df["lon"] * cell).astype(int)
     df["stratum"] = df["region"]
-    df["split"] = splits.assign_splits(df, fractions=(0.6, 0.15, 0.25), seed=seed)
+    df["split"] = splits.assign_splits(
+        df, test_rows=n // 4, val_rows=n // 8, seed=seed
+    )
     return df
 
 

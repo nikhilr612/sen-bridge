@@ -82,6 +82,9 @@ _CANDIDATE_COLUMNS = [
 ]
 #: Order in which the splits are chosen: the benchmark's test set comes first.
 _CHOICE_ORDER = ("test", "val", "train")
+#: Pool sizes as a multiple of the target: room for the caps and the 5 km drops.
+_TEST_POOL_MARGIN = 1.25
+_VAL_POOL_MARGIN = 1.5
 _CELL_DEG = 2  # clusters are 2x2 degree cells (the seed-city list is not shipped)
 _CELL_STRIDE = 1000
 _ROW_GROUP = 100
@@ -157,6 +160,8 @@ def select_release(
         The chosen rows, and the number of rows dropped for distance, keyed
         ``<later split>_near_<chosen split>``.
     """
+    mix = df["region"].value_counts(normalize=True)
+    share = {str(k): float(v) for k, v in mix.items()}  # the whole dataset's mix
     pools = {str(k): g for k, g in df.groupby("split")}
     chosen: dict[str, pd.DataFrame] = {}
     dropped: dict[str, int] = {}
@@ -164,7 +169,7 @@ def select_release(
         pool = pools[name]
         for member_of, cap in splits.CAPS:
             pool = splits.cap_share(pool, member_of(pool), cap, seed=seed)
-        chosen[name] = splits.select_capped(pool, target[name], seed)
+        chosen[name] = splits.select_capped(pool, target[name], share, seed)
         for later in _CHOICE_ORDER[i + 1 :]:
             before = len(pools[later])
             pools[later] = splits.drop_within(pools[later], chosen[name])
@@ -369,7 +374,12 @@ def main() -> None:
     )
     candidates = pd.read_parquet(args.candidates)
     df = kept_examples(results, candidates)
-    df["split"] = splits.assign_splits(df, seed=args.seed)
+    df["split"] = splits.assign_splits(
+        df,
+        test_rows=round(args.test * _TEST_POOL_MARGIN),
+        val_rows=round(args.val * _VAL_POOL_MARGIN),
+        seed=args.seed,
+    )
     target = {"train": args.target - args.val - args.test, "val": args.val}
     target["test"] = args.test
     df, dropped = select_release(df, target, args.seed)
