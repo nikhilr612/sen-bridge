@@ -1,15 +1,17 @@
 """JAX metrics: FID, LPIPS (VGG), PSNR, SSIM, numerically matched to sen_bridge.torch.
 
 Inputs are float images in [-1, 1], channels-last. `psnr`, `ssim` and `lpips` are pure single-image functions
+[H, W, C] -> scalar (jit-safe); use `jax.jit(jax.vmap(fn))` for batches. `FID.update` takes [B, H, W, C] batches
+because it accumulates state and resizes on the CPU. Every metric first rounds to uint8.
 
 Evaluation only: rounding to uint8 has zero gradient, so never use these metrics as a training loss. Values outside
 [-1, 1] are clipped silently (a model outputting 2.0 scores like one outputting 1.0), so check your output range. Rounding
 is idempotent on 8-bit images (u / 127.5 - 1 -> same u), and 0.0 falls on a rounding tie and becomes ~+0.004; both are
 inherent to the 8-bit encoding and identical in the two backends.
-[H, W, C] -> scalar (jit-safe); use `jax.jit(jax.vmap(fn))` for batches. `FID.update` takes [B, H, W, C] batches
-because it accumulates state and resizes on the CPU. Same frozen settings and the same safetensors weights as the
-PyTorch module; the Inception graph follows pytorch-fid (Apache-2.0, see NOTICE) and LPIPS follows
-richzhang/PerceptualSimilarity (BSD-2-Clause). Written as plain functions over a parameter dict, so only jax is needed.
+
+Same frozen settings and the same safetensors weights as the PyTorch module; the Inception graph follows pytorch-fid
+(Apache-2.0, see NOTICE) and LPIPS follows richzhang/PerceptualSimilarity (BSD-2-Clause). Written as plain functions
+over a parameter dict, so only jax is needed.
 """
 from functools import lru_cache
 
