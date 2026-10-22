@@ -32,7 +32,8 @@ def _save(out: Path, sub: str, id_: str, sar_u8, opt_u8):
         Image.fromarray(arr.transpose(1, 2, 0)).save(d / f"{id_}.png")
 
 
-def process(row, remotes, index, out: Path):
+def compute(row, remotes, index):
+    """Fetch one location-season, apply the filters. No file I/O: returns (record, reject reason|None, sar_u8, opt_u8)."""
     s2 = stream.Sample(remotes["S2L2A"][row.tar], *index["S2L2A"][row.tar][row.zarr])
     s1 = stream.Sample(remotes["S1GRD"][row.tar], *index["S1GRD"][row.tar][row.zarr])
     dem_s = stream.Sample(remotes["DEM"][row.tar], *index["DEM"][row.tar][row.zarr])
@@ -74,7 +75,11 @@ def process(row, remotes, index, out: Path):
     elif fl["elev_mean"] > C.ELEV_MAX_M:
         why = "elevation"
 
-    sar_u8, opt_u8 = P.sar_to_uint8(sar), P.opt_to_uint8(rho)
+    return rec, why, P.sar_to_uint8(sar), P.opt_to_uint8(rho)
+
+
+def process(row, remotes, index, out: Path):
+    rec, why, sar_u8, opt_u8 = compute(row, remotes, index)
     if why is None:
         _save(out, "", row.id, sar_u8, opt_u8)
     else:

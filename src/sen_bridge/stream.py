@@ -7,6 +7,7 @@ seasons that survive the metadata filters.
 import io
 import json
 import tarfile
+import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -37,12 +38,19 @@ class Remote:
         self.url, self.size = r.url, int(r.headers["content-length"])
 
     def get(self, start: int, end: int) -> bytes:
-        """Bytes [start, end), clipped to the file."""
+        """Bytes [start, end), clipped to the file. Retries with backoff on throttling and network errors."""
         end = min(end, self.size)
-        for attempt in range(3):
-            r = self.s.get(self.url, headers={"Range": f"bytes={start}-{end - 1}"})
+        for attempt in range(8):
+            try:
+                r = self.s.get(self.url, headers={"Range": f"bytes={start}-{end - 1}"}, timeout=60)
+            except requests.RequestException:
+                time.sleep(min(2 ** attempt, 30))
+                continue
             if r.status_code in (403, 404):  # signed URL expired
                 self._resolve()
+                continue
+            if r.status_code in (429, 500, 502, 503, 504):
+                time.sleep(min(2 ** attempt, 60))
                 continue
             r.raise_for_status()
             return r.content
