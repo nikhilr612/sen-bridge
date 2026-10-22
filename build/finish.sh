@@ -11,6 +11,8 @@ REL="${2:-work/release}"
 CAND=work/candidates.parquet
 # load_dataset writes a full Arrow cache; keep it on this disk and delete it after.
 export HF_DATASETS_CACHE="$PWD/work/hf_cache"
+# Delete that cache however the script ends; a failed check must not leave 20 GB behind.
+trap 'rm -rf "$HF_DATASETS_CACHE"' EXIT
 step() { printf '\n=== %s  [%s]\n' "$1" "$(date +%H:%M:%S)"; }
 
 step "wait for all 477 parts"

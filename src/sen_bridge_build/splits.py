@@ -117,22 +117,31 @@ def enforce_min_distance(
 ) -> pd.Series:
     """Move validation and test rows that are too close to any train row into train.
 
+    A row moved into train can itself be within ``km`` of another validation or test
+    row, so the check repeats until no row is left to move. Each pass only adds rows
+    to train, so it terminates.
+
     Args:
         df: Rows with ``lat`` and ``lon`` columns.
         split: Split of each row.
         km: Minimum allowed distance to a train row, in kilometres.
 
     Returns:
-        A new split series with the offending rows set to ``"train"``.
+        A new split series in which every validation and test row is at least ``km``
+        from every train row.
     """
     split = split.copy()
-    is_train = split == "train"
-    if is_train.all() or not is_train.any():
-        return split
-    tree = cKDTree(_unit(df.loc[is_train, "lat"], df.loc[is_train, "lon"]))
-    dist, _ = tree.query(_unit(df.loc[~is_train, "lat"], df.loc[~is_train, "lon"]))
-    split[split.index[~is_train][dist * _EARTH_RADIUS_KM < km]] = "train"
-    return split
+    while True:
+        is_train = split == "train"
+        if is_train.all() or not is_train.any():
+            return split
+        tree = cKDTree(_unit(df.loc[is_train, "lat"], df.loc[is_train, "lon"]))
+        others = df.loc[~is_train]
+        dist, _ = tree.query(_unit(others["lat"], others["lon"]))
+        too_close = split.index[~is_train][dist * _EARTH_RADIUS_KM < km]
+        if len(too_close) == 0:
+            return split
+        split[too_close] = "train"
 
 
 def stratified_downsample(

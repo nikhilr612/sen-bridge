@@ -78,6 +78,22 @@ def test_splits_and_downsample() -> None:
     assert len(splits.stratified_downsample(df, 500)) == 500
 
 
+def test_min_distance_follows_chains_of_moved_rows() -> None:
+    # B is 3 km from the train row A, C is 6 km from A but 3 km from B. Moving B
+    # into train must also move C; a single pass would leave C within 5 km of B.
+    step = 3 / 111.195  # degrees of longitude per 3 km at the equator
+    df = pd.DataFrame({"lat": [0.0, 0.0, 0.0], "lon": [0.0, step, 2 * step]})
+    split = pd.Series(["train", "val", "test"])
+    out = splits.enforce_min_distance(df, split, km=5.0)
+    assert out.tolist() == ["train", "train", "train"]
+
+
+def test_min_distance_keeps_far_rows_in_place() -> None:
+    df = pd.DataFrame({"lat": [0.0, 0.0], "lon": [0.0, 1.0]})  # about 111 km apart
+    out = splits.enforce_min_distance(df, pd.Series(["train", "val"]), km=5.0)
+    assert out.tolist() == ["train", "val"]
+
+
 def test_cap_share_respects_cap_per_split() -> None:
     rng = np.random.default_rng(0)
     df = pd.DataFrame({
