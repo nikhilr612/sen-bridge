@@ -1,0 +1,45 @@
+{
+  "constants": {
+    "CROP": 256,
+    "SIZE": 128,
+    "SAR_CLIPS": [
+      [
+        -25.0,
+        0.0
+      ],
+      [
+        -32.0,
+        -5.0
+      ],
+      [
+        0.0,
+        15.0
+      ]
+    ],
+    "OPT_MAX": 0.3,
+    "OPT_GAMMA": 0.45454545454545453,
+    "S2_SCALE": 10000.0,
+    "MAX_DT_HOURS": 48.0,
+    "CLOUD_MAX_FRAC": 0.05,
+    "CLOUD_RULE_REJECT": 0.5,
+    "BORDER_DB": -35.0,
+    "BORDER_MAX_FRAC": 0.1,
+    "WATER_DB": -18.0,
+    "WATER_CROP_FRAC": 0.9,
+    "WATER_SPLIT_CAP": 0.1,
+    "NOISE_FLOOR_DB": -28.0,
+    "SLOPE_STD_MAX": 15.0,
+    "ELEV_MAX_M": 2000.0,
+    "SNOW_LAT": 40.0,
+    "SPLIT_MIN_DIST_KM": 5.0,
+    "RFI_Z": 20.0,
+    "SAT_MAX_FRAC": 0.01,
+    "WHITE_MAX_FRAC": 0.4,
+    "WHITE_FLAT_STD": 0.03,
+    "DARK_MEAN_MIN": 0.08
+  },
+  "sha256": "6cd9e14ecb7576fb0625c10786cc7044a2514dbe2c8554537e332ad033431a86",
+  "code_commit": "5372ec41180b9a507fcf1781cd1d09d15b17b1a9",
+  "source_commit": "97a91733db962222e1e6b40a836845ddbbb16b86",
+  "seed": 0
+}
