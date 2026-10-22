@@ -23,3 +23,9 @@ Pooled over all rounds, cloud_shadow (neural mask) rejects were bad 47% of the t
 - Small cloud/shadow patches below 5% remain in kept crops.
 - Intertidal/coastline exclusion not implemented (needs a static layer; licence unconfirmed).
 - Dark threshold 0.08 rests on two data points (bad <=0.064, dimmest good seen 0.094).
+
+## Radar-optical coregistration (build/coreg_check.py, 400 textured land crops)
+Cross-modal gradient correlation, 20 m px, random-pair control. 64% of crops gave a reliable peak (smooth/water/haze crops cannot be measured).
+Flat to moderate terrain: median shift 1 px, 83% within 1 px, no systematic offset. Slope std above 6 deg: 35-50% of crops shift by more than 3 px
+(radar not terrain-corrected). `SLOPE_STD_MAX` set to 8 deg (placeholder was 15). Steep bins hold only 14-26 crops each; cutoff is approximate.
+Resolution limit: whole-pixel shifts only.

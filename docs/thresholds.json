@@ -28,7 +28,7 @@
     "WATER_CROP_FRAC": 0.9,
     "WATER_SPLIT_CAP": 0.1,
     "NOISE_FLOOR_DB": -28.0,
-    "SLOPE_STD_MAX": 15.0,
+    "SLOPE_STD_MAX": 8.0,
     "ELEV_MAX_M": 2000.0,
     "SNOW_LAT": 40.0,
     "SPLIT_MIN_DIST_KM": 5.0,
@@ -38,8 +38,8 @@
     "WHITE_FLAT_STD": 0.03,
     "DARK_MEAN_MIN": 0.08
   },
-  "sha256": "6cd9e14ecb7576fb0625c10786cc7044a2514dbe2c8554537e332ad033431a86",
-  "code_commit": "5372ec41180b9a507fcf1781cd1d09d15b17b1a9",
+  "sha256": "c9bd2ae8b7a885fbf1794cf2fcd934957ffbe4d4fd8c020a849a46dbac265a27",
+  "code_commit": "d6d15c49ece56449b82f3845d7df2be29fe3a32f",
   "source_commit": "97a91733db962222e1e6b40a836845ddbbb16b86",
   "seed": 0
 }

@@ -36,6 +36,7 @@ def process(row, remotes, index, out: Path):
     s2 = stream.Sample(remotes["S2L2A"][row.tar], *index["S2L2A"][row.tar][row.zarr])
     s1 = stream.Sample(remotes["S1GRD"][row.tar], *index["S1GRD"][row.tar][row.zarr])
     dem_s = stream.Sample(remotes["DEM"][row.tar], *index["DEM"][row.tar][row.zarr])
+    lulc_s = stream.Sample(remotes["LULC"][row.tar], *index["LULC"][row.tar][row.zarr])
     bands = s2.s2_all(row.season)
     dn = bands[[3, 2, 1]]  # B04, B03, B02
     sar = P.sar_to_db128(s1.s1(row.season))
@@ -43,11 +44,12 @@ def process(row, remotes, index, out: Path):
     rho12 = P.opt_reflectance128(bands)
     mask = P._center_crop(s2.cloud_mask(row.season))[::2, ::2]  # same window, nearest-neighbour to 128
     dem = dem_s.dem()
+    lulc = P._center_crop(lulc_s.chunk("bands", f"{row.season}.0.0.0")[0, 0])[::2, ::2]
     fl = filters.flags(sar, P._avg2(P._center_crop(dem)))
     rec = {"id": row.id, **fl, **filters.spectral_scores(rho12), **filters.sensei_fracs(mask),
            "rfi_score": filters.rfi_score(sar), "sat_frac": float((rho >= 1.0).mean()),
            **filters.optical_stats(P.opt_to_uint8(rho)),
-           "border_frac": float((sar[0] < C.BORDER_DB).mean())}
+           "border_frac": float((sar[0] < C.BORDER_DB).mean()), **filters.lulc_fracs(lulc)}
 
     why = None
     if filters.invalid_pixels(sar, dn) or rec["sensei_nodata_frac"] > 0:
@@ -99,7 +101,7 @@ def main():
     df = df[df.tar.isin(tars)].reset_index(drop=True)
     print(f"{len(df)} candidates in {len(tars)} shards", flush=True)
 
-    mods = ("S2L2A", "S1GRD", "DEM")
+    mods = ("S2L2A", "S1GRD", "DEM", "LULC")
     remotes = {m: {t: stream.Remote(COMMIT, "train", m, t) for t in tars} for m in mods}
     flat = [r for m in mods for r in remotes[m].values()]
     t0 = time.time()

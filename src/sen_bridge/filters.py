@@ -109,3 +109,11 @@ def sensei_fracs(mask: np.ndarray) -> dict:
         "water_frac_opt": float((mask == 1).mean()),
         "snow_frac_opt": float((mask == 2).mean()),
     }
+
+
+LULC_CLASSES = {1: "water", 2: "trees", 3: "flooded", 4: "crops", 5: "built", 6: "bare", 7: "snow", 9: "rangeland"}
+
+
+def lulc_fracs(lulc: np.ndarray) -> dict:
+    """Class shares of SSL4EO's LULC layer on the crop (static map: input-side, usable for selection)."""
+    return {f"lulc_{name}": float((lulc == k).mean()) for k, name in LULC_CLASSES.items()}
