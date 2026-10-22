@@ -1,0 +1,28 @@
+sen-bridge
+Copyright 2026 The sen-bridge authors. Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This package contains or is derived from the following third-party work. Their licence texts are in licenses/.
+
+CODE
+- pytorch-fid (Apache-2.0), Maximilian Seitzer. The FID Inception-v3 block variants in sen_bridge/torch.py, the
+  graph in sen_bridge/jax.py and the Frechet distance in sen_bridge/fid_core.py are adapted from it.
+  https://github.com/mseitzer/pytorch-fid   (licenses/LICENSE-pytorch-fid.txt)
+- clean-fid (MIT), Copyright (c) 2021 Gaurav Parmar. The 299x299 bicubic resize in sen_bridge/resize.py is adapted from it.
+  https://github.com/GaParmar/clean-fid   (licenses/LICENSE-clean-fid.txt)
+- PerceptualSimilarity / lpips (BSD-2-Clause), Copyright (c) 2018 Richard Zhang, Phillip Isola, Alexei A. Efros,
+  Eli Shechtman, Oliver Wang. The LPIPS computation is ported from it.
+  https://github.com/richzhang/PerceptualSimilarity   (licenses/LICENSE-lpips.txt)
+- torchvision (BSD-3-Clause), Copyright (c) Soumith Chintala 2016. Used as a dependency (Inception block and VGG16
+  definitions); not redistributed.   (licenses/LICENSE-torchvision.txt)
+
+WEIGHTS (not redistributed; downloaded from their original hosts on first use and checked against pinned SHA-256 digests)
+- FID Inception-v3: the TensorFlow inception-2015-12-05 weights as converted by pytorch-fid.
+  Original archive licence: Apache-2.0, Copyright 2015 The TensorFlow Authors   (licenses/LICENSE-tensorflow-inception.txt)
+- LPIPS v0.1 linear layers (VGG): BSD-2-Clause, distributed in the lpips repository.
+- VGG16 ImageNet trunk (torchvision vgg16-397923af): no separate weights licence is published. torchvision's documentation says
+  its pre-trained models "may have their own licenses or terms and conditions derived from the dataset used for training"
+  and that users must determine whether they may use them. See docs/LICENSES.md.
+
+DATA (not part of this package)
+- SEN-Bridge is derived from SSL4EO-S12 v1.1 (CC BY 4.0) and Copernicus Sentinel data. Releases must carry:
+  "Contains modified Copernicus Sentinel data [years]". See docs/LICENSES.md.

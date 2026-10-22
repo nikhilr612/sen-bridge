@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from sen_bridge import constants as C, meta, splits
+from sen_bridge_build import constants as C, meta, splits
 
 REGIONS = [  # coarse (lat0, lat1, lon0, lon1) boxes, first match wins
     ("N America", 12, 85, -170, -50), ("C/S America", -60, 12, -120, -30),

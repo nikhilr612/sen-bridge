@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sen_bridge import filters, meta, preprocess as P, splits
+from sen_bridge_build import filters, meta, preprocess as P, splits
 
 
 def test_sar_roundtrip_and_shapes():

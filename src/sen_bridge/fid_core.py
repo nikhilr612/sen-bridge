@@ -8,12 +8,16 @@ def feature_stats(feats: np.ndarray):
 
 
 def frechet_distance(mu1, s1, mu2, s2, eps=1e-6) -> float:
+    """Fréchet distance between two Gaussians, as in pytorch-fid (Apache-2.0)."""
     diff = mu1 - mu2
-    covmean, _ = linalg.sqrtm(s1.dot(s2), disp=False)
-    if not np.isfinite(covmean).all():
+    covmean = linalg.sqrtm(s1.dot(s2))
+    if not np.isfinite(covmean).all():  # singular product: stabilise with a small diagonal offset
         off = np.eye(s1.shape[0]) * eps
         covmean = linalg.sqrtm((s1 + off).dot(s2 + off))
-    covmean = covmean.real
+    if np.iscomplexobj(covmean):
+        if not np.allclose(np.diagonal(covmean).imag, 0, atol=1e-3):
+            raise ValueError(f"imaginary component {np.max(np.abs(covmean.imag)):.3g} in the matrix square root")
+        covmean = covmean.real
     return float(diff @ diff + np.trace(s1) + np.trace(s2) - 2 * np.trace(covmean))
 
 

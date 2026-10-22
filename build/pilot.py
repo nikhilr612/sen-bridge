@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-from sen_bridge import constants as C, filters, preprocess as P, stream
+from sen_bridge_build import constants as C, filters, preprocess as P, stream
 
 COMMIT = "97a91733db962222e1e6b40a836845ddbbb16b86"
 

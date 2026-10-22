@@ -5,7 +5,7 @@ import zipfile
 import numpy as np
 from numcodecs import Blosc
 
-from sen_bridge import stream
+from sen_bridge_build import stream
 
 
 class FakeRemote:

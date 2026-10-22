@@ -6,7 +6,7 @@ import sys
 
 import pandas as pd
 
-from sen_bridge import filters
+from sen_bridge_build import filters
 
 
 def long_form(df: pd.DataFrame) -> pd.DataFrame:

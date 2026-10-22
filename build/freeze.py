@@ -7,7 +7,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from sen_bridge import constants as C
+from sen_bridge_build import constants as C
 
 vals = {k: v for k, v in vars(C).items() if k.isupper()}
 body = json.dumps(vals, sort_keys=True, indent=2)

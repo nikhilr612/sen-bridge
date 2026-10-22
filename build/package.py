@@ -18,7 +18,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from datasets import ClassLabel, Features, Image, Sequence, Value
 
-from sen_bridge import constants as C, meta, splits
+from sen_bridge_build import constants as C, meta, splits
 from finalize import region
 
 SPLITS = {"train": "train", "val": "validation", "test": "test"}
@@ -117,9 +117,12 @@ def main():
     for name in ("train", "val", "test"):
         files += write_split(df[df.split == name], name, out, a.rows_per_shard)
     import shutil  # reference copies; load_dataset never runs them
-    for src, dst in (("build", "scripts/build"), ("src/sen_bridge", "scripts/sen_bridge"), ("docs", "docs"), ("tests", "scripts/tests")):
+    for src, dst in (("build", "scripts/build"), ("src/sen_bridge", "scripts/sen_bridge"), ("src/sen_bridge_build", "scripts/sen_bridge_build"),
+                     ("docs", "docs"), ("tests", "scripts/tests"), ("licenses", "licenses")):
         shutil.copytree(src, out / dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    shutil.copy("pyproject.toml", out / "scripts" / "pyproject.toml")
+    for f in ("pyproject.toml", "LICENSE", "NOTICE", "README.md"):
+        shutil.copy(f, out / "scripts" / f)
+    shutil.copy("scripts/evaluate.py", out / "scripts" / "evaluate.py")
     (out / "MANIFEST.sha256").write_text("".join(
         f"{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.relative_to(out)}\n" for f in sorted(files + [out / 'rejects' / 'rejects.parquet'])))
 

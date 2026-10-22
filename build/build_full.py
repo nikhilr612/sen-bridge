@@ -17,7 +17,7 @@ import pandas as pd
 from PIL import Image
 
 from pilot import COMMIT, compute
-from sen_bridge import constants as C, stream
+from sen_bridge_build import constants as C, stream
 
 MODS = ("S2L2A", "S1GRD", "DEM", "LULC")
 
