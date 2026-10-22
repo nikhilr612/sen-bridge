@@ -7,9 +7,10 @@ from __future__ import annotations
 import io
 import tarfile
 import zipfile
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import requests
 from numcodecs import Blosc
 from typing_extensions import override
 
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 _SHAPE = (4, 2, 8, 8)
+# A dummy value that only checks the header format; it is not a real credential.
+_DUMMY_TOKEN = "hf_dummy"  # ruff: ignore[hardcoded-password-string]
 
 
 class FakeRemote(stream.Remote):
@@ -94,3 +97,45 @@ def test_zip_directory_is_read_with_few_requests() -> None:
     before = remote.calls
     stream.Sample(remote, offset, size).s1(0)
     assert remote.calls - before <= 3
+
+
+class _RecordingSession(requests.Session):
+    """A session that answers the hub request itself and records its headers."""
+
+    def __init__(self) -> None:
+        """Start with no recorded request."""
+        super().__init__()
+        self.sent_headers: dict[str, str] = {}
+
+    @override
+    def head(self, url: str | bytes, **kwargs: Any) -> requests.Response:
+        """Record the request headers and answer like the hub.
+
+        Args:
+            url: Requested URL.
+            **kwargs: Request options; ``headers`` is recorded.
+
+        Returns:
+            A successful response with a CDN URL and a size.
+        """
+        self.sent_headers = dict(kwargs.get("headers") or {})
+        response = requests.Response()
+        response.status_code = 200
+        response.url = "https://cdn.example/shard"
+        response.headers["content-length"] = "123"
+        return response
+
+
+def test_token_is_sent_to_the_hub() -> None:
+    session = _RecordingSession()
+    remote = stream.Remote(
+        "c", "train/S2L2A/x.tar", session=session, token=_DUMMY_TOKEN
+    )
+    assert session.sent_headers == {"Authorization": f"Bearer {_DUMMY_TOKEN}"}
+    assert remote.size == 123
+
+
+def test_no_token_means_no_authorization_header() -> None:
+    session = _RecordingSession()
+    stream.Remote("c", "train/S2L2A/x.tar", session=session, token="")
+    assert session.sent_headers == {}

@@ -6,11 +6,13 @@ Usage::
 
     python build/build_full.py candidates.parquet OUT_DIR
         [--shard-workers 12] [--sample-workers 16] [--limit-shards N]
+        [--partition I/N]
 
 A part holds every candidate of the shard: status (``kept`` or the reject reason),
-all scores and flags, and for kept rows the two PNGs as bytes. Re-running skips
-finished shards, so an interrupted build resumes. Rejected rows store no images.
-Nothing else is written to disk.
+all scores and flags, and for kept rows the two PNGs as bytes. ``--partition I/N``
+handles every N-th shard starting at I, so N processes can share the work.
+Re-running skips finished shards, so an interrupted build resumes. Rejected rows
+store no images. Nothing else is written to disk.
 """
 
 from __future__ import annotations
@@ -100,7 +102,7 @@ def open_shard(
         The remote of each modality and, for each, a map from zip name to ``(offset,
         size)``.
     """
-    remotes = {m: stream.Remote(COMMIT, "train", m, tar) for m in MODALITIES}
+    remotes = {m: stream.Remote(COMMIT, f"train/{m}/{tar}") for m in MODALITIES}
     with ThreadPoolExecutor(
         len(MODALITIES)
     ) as pool:  # the four header walks are independent
@@ -162,12 +164,17 @@ def main() -> None:
     parser.add_argument("--shard-workers", type=int, default=12)
     parser.add_argument("--sample-workers", type=int, default=16)
     parser.add_argument("--limit-shards", type=int, default=0)
+    parser.add_argument(
+        "--partition", default="0/1", help="I/N: every N-th shard from I"
+    )
     args = parser.parse_args()
     candidates = pd.read_parquet(args.candidates)
     candidates = candidates[candidates["cloud_cover"] <= constants.CLOUD_MAX_FRAC]
     groups = list(candidates.groupby("tar"))
     if args.limit_shards:
         groups = groups[: args.limit_shards]
+    index, count = (int(x) for x in args.partition.split("/"))
+    groups = groups[index::count]
     todo = [
         (t, g)
         for t, g in groups

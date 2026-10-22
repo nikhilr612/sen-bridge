@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import numpy as np
 import requests
-from huggingface_hub import hf_hub_url
+from huggingface_hub import get_token, hf_hub_url
 from numcodecs import Blosc
 from typing_extensions import override
 
@@ -68,33 +68,46 @@ class Remote:
     def __init__(
         self,
         commit: str,
-        split: str,
-        modality: str,
-        shard: str,
+        path: str,
         session: requests.Session | None = None,
+        token: str | None = None,
     ) -> None:
         """Resolve the CDN URL of one shard.
 
         Args:
             commit: Hugging Face commit hash that pins the dataset revision.
-            split: Dataset split, for example ``"train"``.
-            modality: Modality folder, for example ``"S2L2A"``.
-            shard: Shard file name.
+            path: Path of the shard in the repository, for example
+                ``"train/S2L2A/ssl4eos12_shard_000001.tar"``.
             session: HTTP session to reuse; a new one is created if omitted.
+            token: Hugging Face access token for the hub request. Defaults to the
+                token of ``hf auth login`` or ``HF_TOKEN``; authenticated requests
+                have much higher rate limits. It is never stored on the instance
+                beyond the request headers and never logged.
         """
-        self.name = f"{split}/{modality}/{shard}"
+        self.name = path
         self._hub_url = hf_hub_url(
             REPO, self.name, repo_type="dataset", revision=commit
         )
         self._session = session or requests.Session()
+        resolved = token if token is not None else get_token()
+        has_token = resolved is not None and bool(resolved)
+        self._headers = {"Authorization": f"Bearer {resolved}"} if has_token else {}
         self._url = ""
         self.size = 0
         self._resolve()
 
     def _resolve(self) -> None:
-        """Resolve the signed CDN URL and file size."""
+        """Resolve the signed CDN URL and file size.
+
+        The token is sent only to the hub. The CDN URL it redirects to is
+        pre-signed, and ``requests`` drops the ``Authorization`` header on the
+        cross-host redirect.
+        """
         response = self._session.head(
-            self._hub_url, allow_redirects=True, timeout=_TIMEOUT_S
+            self._hub_url,
+            headers=self._headers,
+            allow_redirects=True,
+            timeout=_TIMEOUT_S,
         )
         response.raise_for_status()
         self._url, self.size = response.url, int(response.headers["content-length"])
