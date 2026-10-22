@@ -47,10 +47,16 @@
     "CLEAN_MEAN_RANGE": [
       0.1,
       0.8
+    ],
+    "LAT_BAND_EDGES": [
+      20,
+      30,
+      40,
+      50
     ]
   },
-  "sha256": "025f53aaa79bda09004a64d160505f8d6d846c7ffe0f751125b0b21e1aa02cc9",
-  "code_commit": "48d3c9c1a19d0d2ca9223aece5285e478515809f",
+  "sha256": "be1167553d9c52015afe5362a53791b70edfd66aa01b61ec834802f34d583eb4",
+  "code_commit": "d0b70e9cfcc48b0decbdd25551e19bc90bbb9ace",
   "source_commit": "97a91733db962222e1e6b40a836845ddbbb16b86",
   "seed": 0
 }
