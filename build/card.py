@@ -43,9 +43,12 @@ sensor coupling, no synthetic degradation.
 - **Evaluation:** `scripts/evaluate.py` and the `sen-bridge` metrics (FID, LPIPS,
   PSNR, SSIM); real-target FID statistics are in `stats/`.
 - **Code:** the installable `sen-bridge` package is at
-  <https://github.com/nikhilr612/sen-bridge> (tag `v0.1.1`); `scripts/` here is a
+  <https://github.com/nikhilr612/sen-bridge> (tag `v0.1.2`); `scripts/` here is a
   reference snapshot. Install with `uv add "sen-bridge[torch] @
-  git+https://github.com/nikhilr612/sen-bridge@v0.1.1"`.
+  git+https://github.com/nikhilr612/sen-bridge@v0.1.2"`.
+- **Fast random access:** an optional copy as memory-mappable `.npy` files is at
+  <https://huggingface.co/datasets/nikhilr01/sen-bridge-npy>, read with
+  `sen_bridge.data` (pixels identical to this release).
 
 ## Provenance
 

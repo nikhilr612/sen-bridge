@@ -1,6 +1,6 @@
 [project]
 name = "sen-bridge"
-version = "0.1.1"
+version = "0.1.2"
 description = "SEN-Bridge: FID, LPIPS, PSNR and SSIM for SAR-to-optical benchmarks (PyTorch and JAX), plus the dataset build code"
 readme = "README.md"
 license = "Apache-2.0"
@@ -13,8 +13,9 @@ dependencies = ["numpy", "scipy", "pillow"]
 # Metrics backends: install the one you use.
 torch = ["torch", "torchvision", "safetensors", "typing-extensions"]
 jax = ["jax", "safetensors"]
-# One-off conversion of the downloaded weights (python -m sen_bridge.weights). It
-# unpickles the original .pth files, so it needs torch even for JAX users.
+# Rebuilding the weights from the original hosts, the fallback when the Hub copy
+# cannot be downloaded (python -m sen_bridge.weights). It unpickles the original
+# .pth files, so it needs torch even for JAX users.
 convert = ["torch", "safetensors"]
 # scripts/evaluate.py and scripts/make_fid_stats.py (also install torch or jax).
 eval = ["datasets"]

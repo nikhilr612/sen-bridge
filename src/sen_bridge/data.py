@@ -50,9 +50,9 @@ if TYPE_CHECKING:
 #: Hub dataset repository holding the ``.npy`` files.
 REPO = "nikhilr01/sen-bridge-npy"
 #: Immutable revision of the repository this version of the code reads.
-HUB_REVISION = "0" * 40
+HUB_REVISION = "87391d693b9110dcf49d299c509b8843a9231d3c"
 #: SHA-256 of the manifest of that revision.
-MANIFEST_SHA256 = "0" * 64
+MANIFEST_SHA256 = "94711aaeabd7cfa320592b6b2b578eebe3408c7df0f83bca80cc4745119c23da"
 #: Split names, in the order the release lists them.
 SPLITS = ("train", "validation", "test")
 #: Name of the digest list that every release directory carries.
