@@ -18,6 +18,8 @@ jax = ["jax", "safetensors"]
 convert = ["torch", "safetensors"]
 # scripts/evaluate.py and scripts/make_fid_stats.py (also install torch or jax).
 eval = ["datasets"]
+# Reading the metadata table of the .npy release (sen_bridge.data.Split.metadata).
+data = ["pandas", "pyarrow"]
 # The dataset build (sen_bridge_build and build/).
 build = [
     "pandas",

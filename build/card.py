@@ -172,7 +172,7 @@ def _loading() -> str:
 
 #: Appended after formatting: BibTeX contains braces, which ``str.format`` would
 #: read.
-_CITATION = """
+CITATION = """
 ## Citation
 
 ```bibtex
@@ -282,7 +282,7 @@ def body(stats: dict[str, Any], thresholds: dict[str, Any]) -> str:
             doi=_DOI,
         )
         + _loading()
-        + _CITATION
+        + CITATION
     )
 
 

@@ -18,6 +18,7 @@ The base install needs only numpy, scipy and Pillow. Optional dependencies are e
 | `jax` | jax, safetensors | `sen_bridge.jax` |
 | `convert` | torch, safetensors | rebuilding the weights from the original hosts (fallback if the Hub copy is unreachable) |
 | `eval` | datasets | `scripts/evaluate.py`, `scripts/make_fid_stats.py` |
+| `data` | pandas, pyarrow | `sen_bridge.data.Split.metadata()` (the `.npy` release's metadata table) |
 | `build` | pandas, pyarrow, requests, huggingface_hub, datasets, pyyaml, numcodecs | the dataset build |
 | `dev` | everything above plus ruff, ty, pytest, stubs | `./check.sh` |
 
@@ -157,6 +158,27 @@ if __name__ == "__main__":
 
 In one local run with 4 workers this gave about 1,000 pairs/s; your speed depends on
 disk, cache and CPU. The Grain calls above are version-sensitive.
+
+## Fast random access: the `.npy` release
+
+An optional second copy of the dataset, [`nikhilr01/sen-bridge-npy`](https://huggingface.co/datasets/nikhilr01/sen-bridge-npy),
+stores each split as raw 8-bit arrays so that a read is a slice of a memory-mapped file with no image
+decoding. The Parquet release remains the reference. `sen_bridge.data` downloads it from a pinned revision,
+verifies every file, and gives a `datasets`-like API (numpy only):
+
+```python
+from sen_bridge import data
+
+train = data.load_dataset("train")  # "validation", "test"; None opens all three
+pair = train[1234]  # {"sar", "optical", "meta", "id"}
+batch = train[[5, 1, 9]]  # leading batch axis, any order
+for batch in train.iter_batches(256, shuffle=True, seed=0, epochs=10):
+    ...
+```
+
+`float_images=True` returns `float32` images in `[-1, 1]`. A `Split` has `__len__` and `__getitem__`, so it
+is a map-style dataset for PyTorch and Grain (`grain.DataLoader(data_source=train, ...)`), and it pickles by
+path, so worker processes reopen the memory maps instead of copying them.
 
 ## Licences
 
