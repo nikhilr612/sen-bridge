@@ -2,8 +2,8 @@ sen-bridge
 Copyright 2026 Nikhil Raghavendra
 Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-This product includes software adapted from third-party projects, uses third-party
-model weights that it does not redistribute, and builds a dataset from third-party
+This product includes software adapted from third-party projects, uses and redistributes
+converted third-party model weights, and builds a dataset from third-party
 data. Their licence texts are in licenses/.
 
 CODE
@@ -23,8 +23,9 @@ CODE
   (licenses/LICENSE-torchvision.txt)
 Each adapted file states its changes from the original in its module docstring.
 
-WEIGHTS (not redistributed; downloaded from their original hosts on first use and
-checked against pinned SHA-256 digests)
+WEIGHTS (converted copies are hosted at huggingface.co/nikhilr01/sen-bridge-weights and
+downloaded on first use against pinned SHA-256 digests; the originals can also be
+rebuilt from their hosts)
 - FID Inception-v3: the TensorFlow inception-2015-12-05 weights as converted by
   pytorch-fid. Original archive licence: Apache-2.0, Copyright 2015 The TensorFlow
   Authors   (licenses/LICENSE-tensorflow-inception.txt)
@@ -32,7 +33,8 @@ checked against pinned SHA-256 digests)
 - VGG16 ImageNet trunk (torchvision vgg16-397923af): torchvision publishes no
   separate licence for its weights and says its pre-trained models "may have their
   own licenses or terms and conditions derived from the dataset used for training".
-  The maintainer has decided to use them; see docs/LICENSES.md.
+  The maintainer has decided to use and redistribute them, at the maintainer's own
+  responsibility; see docs/LICENSES.md.
 
 DATA (the SEN-Bridge dataset, released separately from this code)
 - Licence: CC BY 4.0 (licenses/LICENSE-CC-BY-4.0.txt), the licence of its source.

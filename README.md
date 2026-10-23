@@ -7,7 +7,7 @@ The metrics package knows nothing about splits, loaders or models: you decide wh
 
 ```
 pip install "sen-bridge[torch]"     # or "sen-bridge[jax,convert]" for JAX
-python -m sen_bridge.weights        # one-off: download, hash-check and convert the weights
+python -m sen_bridge.weights        # optional: fetch the weights now (else on first use)
 ```
 
 The base install needs only numpy, scipy and Pillow. Optional dependencies are extras:
@@ -16,7 +16,7 @@ The base install needs only numpy, scipy and Pillow. Optional dependencies are e
 |---|---|---|
 | `torch` | torch, torchvision, safetensors | `sen_bridge.torch` |
 | `jax` | jax, safetensors | `sen_bridge.jax` |
-| `convert` | torch, safetensors | the one-off weight conversion (needed even with `jax`) |
+| `convert` | torch, safetensors | rebuilding the weights from the original hosts (fallback if the Hub copy is unreachable) |
 | `eval` | datasets | `scripts/evaluate.py`, `scripts/make_fid_stats.py` |
 | `build` | pandas, pyarrow, requests, huggingface_hub, datasets, pyyaml, numcodecs | the dataset build |
 | `dev` | everything above plus ruff, ty, pytest, stubs | `./check.sh` |
@@ -164,9 +164,11 @@ disk, cache and CPU. The Grain calls above are version-sensitive.
   third-party code and its licences are in `NOTICE` and `licenses/`.
 - **Dataset:** CC BY 4.0, the licence of its source, SSL4EO-S12 v1.1. Attribution and the
   Copernicus notice are in the dataset card and `NOTICE`.
-- **Weights** are **not** redistributed; they come from their original hosts and are
-  SHA-256 checked. The FID and LPIPS-linear weights are Apache-2.0 and BSD-2-Clause.
-  The VGG16 trunk (used by LPIPS) has no published weights licence upstream;
+- **Weights:** converted copies are hosted at
+  [`nikhilr01/sen-bridge-weights`](https://huggingface.co/nikhilr01/sen-bridge-weights)
+  (pinned revision, SHA-256 checked, no torch needed). The FID and LPIPS-linear weights
+  are Apache-2.0 and BSD-2-Clause. The VGG16 trunk (used by LPIPS) has no published
+  weights licence upstream and is redistributed at the maintainer's responsibility;
   `docs/LICENSES.md` records the position.
 
 ## Development standards

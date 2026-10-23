@@ -1,14 +1,16 @@
 # Copyright 2026 Nikhil Raghavendra
 # SPDX-License-Identifier: Apache-2.0
-"""Download, verify and convert the three third-party weight sets the metrics need.
+"""Fetch and verify the weights the metrics need, as safetensors.
 
-Nothing is redistributed with sen-bridge: files are fetched from their original
-hosts on first use, checked against pinned SHA-256 digests, and stored as
-safetensors so the PyTorch and JAX implementations load exactly the same numbers.
-See NOTICE for the licence of each source.
+The PyTorch and JAX implementations load exactly the same numbers. On first use the
+two converted files are downloaded from a pinned revision of
+``nikhilr01/sen-bridge-weights`` and checked against pinned SHA-256 digests; no
+torch is needed for that. If the download fails, the files are rebuilt from the
+three original hosts (also hash-pinned), which needs torch once to unpickle the
+original ``.pth`` files. See NOTICE for the licence of each source; the VGG16 part
+carries no licence assertion.
 
-Run ``python -m sen_bridge.weights`` to fetch and convert everything. Converting
-needs torch once, to unpickle the original ``.pth`` files.
+Run ``python -m sen_bridge.weights`` to fetch everything ahead of time.
 """
 
 from __future__ import annotations
@@ -22,6 +24,20 @@ from pathlib import Path
 
 _CHUNK = 1 << 20
 _HTTPS = "https://"
+
+#: Immutable revision of the converted weights on the Hub.
+HUB_REVISION = "1761854f6d9e6aac2e918a3bff18f89a377db1ce"
+_HUB = (
+    f"https://huggingface.co/nikhilr01/sen-bridge-weights/resolve/{HUB_REVISION}/"
+)
+
+#: Pinned SHA-256 digests of the converted safetensors files.
+CONVERTED: dict[str, str] = {
+    "fid_inception": (
+        "b7a528bf4051f62c057bc14657865abf180a23eb1748d00ff0933d84698202ed"
+    ),
+    "lpips_vgg": "a96ef46bc0b0a064b67e277c15af82caa42278dd79aba0034815ed355e1aaacb",
+}
 
 
 @dataclass(frozen=True)
@@ -140,11 +156,39 @@ def _fetch(name: str) -> Path:
     return dst
 
 
-def prepare() -> None:
-    """Fetch, verify and convert all weights into the cache.
+def _download_converted(name: str) -> Path:
+    """Download one converted file from the Hub and verify its digest.
 
-    This is a one-off step. It imports torch (extra ``convert``) to unpickle the
-    original ``.pth`` files.
+    Args:
+        name: Key of :data:`CONVERTED`.
+
+    Returns:
+        Path of the verified file in the cache.
+
+    Raises:
+        ValueError: If the downloaded file does not match its pinned digest (it
+            is then removed).
+    """
+    dst = cache_dir() / f"{name}.safetensors"
+    partial = dst.with_suffix(".part")
+    # The URL is a fixed HTTPS constant.
+    urllib.request.urlretrieve(  # ruff: ignore[suspicious-url-open-usage]
+        f"{_HUB}{dst.name}", partial
+    )
+    digest = _sha256(partial)
+    if digest != CONVERTED[name]:
+        partial.unlink()
+        msg = f"{name}: SHA-256 {digest} does not match the pinned digest; removed"
+        raise ValueError(msg)
+    partial.rename(dst)
+    return dst
+
+
+def prepare() -> None:
+    """Rebuild the converted weights from the original hosts.
+
+    This is the fallback for when the Hub copy is unavailable. It imports torch
+    (extra ``convert``) to unpickle the original ``.pth`` files.
     """
     # Optional dependency (extra ``convert``) needed only by this one-off step.
     import safetensors.torch as st  # ruff: ignore[import-outside-top-level]
@@ -173,7 +217,11 @@ def prepare() -> None:
 
 
 def path(name: str) -> Path:
-    """Return the converted safetensors file for a network, building it if missing.
+    """Return the converted safetensors file for a network, fetching it if missing.
+
+    The file is downloaded from the Hub revision pinned in :data:`HUB_REVISION`. If
+    the download fails (offline, host down), it is rebuilt from the original hosts
+    with :func:`prepare`. A digest mismatch is never retried or hidden.
 
     Args:
         name: ``"fid_inception"`` or ``"lpips_vgg"``.
@@ -182,18 +230,20 @@ def path(name: str) -> Path:
         Path of the safetensors file.
     """
     out = cache_dir() / f"{name}.safetensors"
-    if not out.exists():
+    if out.exists():
+        return out
+    try:
+        return _download_converted(name)
+    # Offline or host down: rebuild from the original sources instead.
+    except OSError:
         prepare()
     return out
 
 
 def main() -> None:
-    """Fetch and convert all weights, then print the resulting files and digests."""
-    prepare()
-    for name in ("fid_inception", "lpips_vgg"):
-        sys.stdout.write(f"{path(name)} {path(name).stat().st_size}\n")
-    for name, src in SOURCES.items():
-        sys.stdout.write(f"{name} {src.sha256}\n")
+    """Fetch all weights, then print the resulting files and their digests."""
+    for name, digest in CONVERTED.items():
+        sys.stdout.write(f"{path(name)} {path(name).stat().st_size} {digest}\n")
 
 
 if __name__ == "__main__":

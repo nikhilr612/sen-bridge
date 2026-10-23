@@ -17,13 +17,13 @@ Apache-2.0 requires keeping the licence text, the NOTICE and a statement of chan
 All are in `NOTICE` and `licenses/`. The copyright holder is Nikhil Raghavendra, as named in
 `NOTICE` and in every source file's header (enforced by the linter).
 
-## Weights (never redistributed; fetched from the original host and hash-checked)
+## Weights (converted copies hosted at `nikhilr01/sen-bridge-weights`)
 
 | Weights | Source | Licence | Status |
 |---|---|---|---|
 | FID Inception-v3 | pytorch-fid release `fid_weights` (converted from the TensorFlow `inception-2015-12-05` archive) | The TF archive ships a `LICENSE`: Apache-2.0, (c) 2015 The TensorFlow Authors | Clear. SHA-256 pinned (its `6726825d` prefix matches the published file name). |
 | LPIPS v0.1 VGG linear layers | lpips repository | BSD-2-Clause (repository licence) | Clear. **No published digest**: pinned trust-on-first-use. |
-| VGG16 ImageNet trunk | torchvision `vgg16-397923af` | **OPEN.** No weights-specific licence is published. torchvision's docs say its pre-trained models may carry terms derived from the training data and that users must check. The Oxford VGG page says the *original* models are CC BY, but I did not confirm torchvision's weights are those. | SHA-256 pinned (prefix matches the file name). Not redistributed, which avoids the question for sen-bridge but not for users. Every LPIPS paper uses these weights; for a commercial use, verify. |
+| VGG16 ImageNet trunk | torchvision `vgg16-397923af` | **OPEN.** No weights-specific licence is published. torchvision's docs say its pre-trained models may carry terms derived from the training data and that users must check. The Oxford VGG page says the *original* models are CC BY, but I did not confirm torchvision's weights are those. | SHA-256 pinned (prefix matches the file name). **Redistributed** (converted to safetensors) in the weights repo, by the maintainer's explicit decision and at the maintainer's responsibility; the repo card asserts no licence for it and offers removal on request. Every LPIPS paper uses these weights; for a commercial use, verify. |
 
 ## Data
 
@@ -42,7 +42,8 @@ All are in `NOTICE` and `licenses/`. The copyright holder is Nikhil Raghavendra,
 2. **VGG16 weights for LPIPS: keep, decided.** The maintainer's view is that the weights are
    unlikely to be an issue in practice. For the record, the upstream position is unchanged:
    torchvision publishes no separate weights licence and tells users to check the terms of its
-   pre-trained models. Nothing is redistributed, so sen-bridge itself ships no weights, but
-   users who need certainty (for example for commercial use) should verify the terms
-   themselves. This file will be updated if upstream states a licence for these weights.
+   pre-trained models. The converted weights are now hosted in `nikhilr01/sen-bridge-weights`
+   (decided explicitly by the maintainer, who accepts responsibility if a rights holder
+   objects; the file would then be removed). Users who need certainty (for example for
+   commercial use) should verify the terms themselves. This file will be updated if upstream states a licence for these weights.
 3. **Dataset licence:** CC BY 4.0, inherited from SSL4EO-S12 v1.1; not a free choice.
