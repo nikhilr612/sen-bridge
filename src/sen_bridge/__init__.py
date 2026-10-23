@@ -8,4 +8,4 @@ Import the framework you use; this package imports neither:
     as sbj  # [H, W, 3] per image, [B, H, W, 3] for FID.update
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

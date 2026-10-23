@@ -6,7 +6,7 @@ code that builds the SEN-Bridge dataset (radar-to-optical Sentinel-1/2 pairs for
 The metrics package knows nothing about splits, loaders or models: you decide what to compare and when.
 
 ```
-pip install "sen-bridge[torch]"     # or "sen-bridge[jax,convert]" for JAX
+uv add "sen-bridge[torch] @ git+https://github.com/nikhilr612/sen-bridge@v0.1.1"   # or [jax]
 python -m sen_bridge.weights        # optional: fetch the weights now (else on first use)
 ```
 

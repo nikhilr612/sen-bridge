@@ -1,6 +1,6 @@
 [project]
 name = "sen-bridge"
-version = "0.1.0"
+version = "0.1.1"
 description = "SEN-Bridge: FID, LPIPS, PSNR and SSIM for SAR-to-optical benchmarks (PyTorch and JAX), plus the dataset build code"
 readme = "README.md"
 license = "Apache-2.0"
