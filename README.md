@@ -68,8 +68,9 @@ per-image PSNR/SSIM/LPIPS with 95% bootstrap intervals resampled by geographic c
 
 ## Loading the dataset
 
-With 🤗 Datasets (images decode to PIL; `meta`, `lat`, `lon`, `dt_hours` and the
-quality flags are plain columns):
+With 🤗 Datasets, images decode to PIL. `lat`, `lon`, `dt_hours` and the quality flags
+are plain columns, `meta` is a list of 7 float32 values and `orbit` is a class label
+(0 = ascending, 1 = descending):
 
 ```python
 from datasets import load_dataset
@@ -77,17 +78,22 @@ from datasets import load_dataset
 ds = load_dataset("nikhilr01/sen-bridge", split="validation")  # or "train", "test"
 row = ds[0]
 sar, optical = row["sar"], row["optical"]  # 128x128 RGB PIL images, 8-bit
+meta = row["meta"]  # conditioning vector, see below
 ```
 
-The images are fixed-range 8-bit, so the only preprocessing a model needs is
-scaling to float, for example `np.asarray(im, np.float32) / 127.5 - 1`. The first
-`load_dataset` call downloads and prepares **all** splits (about 12 GB of disk, even
-with `split=`); add `streaming=True` to avoid that (iteration only, no random
-access).
+`meta` is `(sin doy, cos doy, x, y, z, dt / 48 h, orbit)`: the season as a point on a
+circle, the unit vector `(x, y, z)` of the location, the radar-to-optical time gap
+scaled by 48 h, and the orbit as +1 (descending) or -1 (ascending).
 
-With [Grain](https://github.com/google/grain) (tested with Grain 0.2.18; the
-source reloads the dataset in each worker process, and the script needs the
-`__main__` guard because Grain starts workers by spawning):
+The images are fixed-range 8-bit, so the only preprocessing a model needs is scaling to
+float, for example `np.asarray(im, np.float32) / 127.5 - 1`. The first `load_dataset`
+call downloads and prepares **all** splits (about 12 GB of disk, even with `split=`);
+add `streaming=True` to avoid that (iteration only, no random access).
+
+With [Grain](https://github.com/google/grain) (tested with Grain 0.2.18). Grain starts
+worker processes by spawning, so the script needs the `__main__` guard, and the source
+reloads the dataset in each worker instead of pickling it. Build the source in the
+parent first, as `main` does, so the workers open a warm cache:
 
 ```python
 import grain
@@ -102,7 +108,7 @@ def to_float(image):
 
 
 class Pairs:
-    """Random-access source of (radar, optical) float32 pairs in [-1, 1]."""
+    """Random-access source of (radar, optical, metadata) examples."""
 
     def __init__(self, split):
         self.split = split
@@ -113,7 +119,11 @@ class Pairs:
 
     def __getitem__(self, i):
         row = self.ds[int(i)]
-        return {"sar": to_float(row["sar"]), "optical": to_float(row["optical"])}
+        return {
+            "sar": to_float(row["sar"]),  # [128, 128, 3] in [-1, 1]
+            "optical": to_float(row["optical"]),  # [128, 128, 3] in [-1, 1]
+            "meta": np.asarray(row["meta"], np.float32),  # [7]
+        }
 
     def __getstate__(self):  # do not pickle the dataset into workers
         return {"split": self.split}
@@ -137,7 +147,7 @@ def main():
         worker_count=4,
     )
     for batch in loader:
-        print(batch["sar"].shape, batch["optical"].shape)  # (64, 128, 128, 3) each
+        print({k: v.shape for k, v in batch.items()})  # sar, optical, meta
         break
 
 
@@ -145,7 +155,8 @@ if __name__ == "__main__":
     main()
 ```
 
-On a 4-worker local run this gave roughly 1,000 pairs/s.
+In one local run with 4 workers this gave about 1,000 pairs/s; your speed depends on
+disk, cache and CPU. The Grain calls above are version-sensitive.
 
 ## Licences
 

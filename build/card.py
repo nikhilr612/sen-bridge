@@ -155,91 +155,23 @@ the Hub).
 """
 
 
+def _loading() -> str:
+    """Return the README's loading section, so the card cannot drift from it.
+
+    Returns:
+        The section from ``## Loading the dataset`` up to the next heading, with
+        a trailing blank line.
+    """
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(
+        encoding="utf-8"
+    )
+    start = readme.index("## Loading the dataset")
+    end = readme.index("\n## ", start + 1)
+    return "\n" + readme[start:end].rstrip() + "\n"
+
+
 #: Appended after formatting: BibTeX contains braces, which ``str.format`` would
 #: read.
-_LOADING = '''
-## Loading the data
-
-With 🤗 Datasets (images decode to PIL; `meta`, `lat`, `lon`, `dt_hours` and the
-quality flags are plain columns):
-
-```python
-from datasets import load_dataset
-
-ds = load_dataset("nikhilr01/sen-bridge", split="validation")  # or "train", "test"
-row = ds[0]
-sar, optical = row["sar"], row["optical"]   # 128x128 RGB PIL images, 8-bit
-```
-
-The images are fixed-range 8-bit, so the only preprocessing a model needs is
-scaling to float, for example `np.asarray(im, np.float32) / 127.5 - 1`. The first
-`load_dataset` call downloads and prepares **all** splits (about 12 GB of disk, even
-with `split=`); add `streaming=True` to avoid that (iteration only, no random
-access).
-
-With [Grain](https://github.com/google/grain) (tested with Grain 0.2.18; the
-source reloads the dataset in each worker process, and the script needs the
-`__main__` guard because Grain starts workers by spawning):
-
-```python
-import grain
-import numpy as np
-from datasets import load_dataset
-
-REPO = "nikhilr01/sen-bridge"
-
-
-def to_float(image):
-    return np.asarray(image.convert("RGB"), np.float32) / 127.5 - 1
-
-
-class Pairs:
-    """Random-access source of (radar, optical) float32 pairs in [-1, 1]."""
-
-    def __init__(self, split):
-        self.split = split
-        self.ds = load_dataset(REPO, split=split)
-
-    def __len__(self):
-        return len(self.ds)
-
-    def __getitem__(self, i):
-        row = self.ds[int(i)]
-        return {"sar": to_float(row["sar"]), "optical": to_float(row["optical"])}
-
-    def __getstate__(self):  # do not pickle the dataset into workers
-        return {"split": self.split}
-
-    def __setstate__(self, state):
-        self.__init__(state["split"])
-
-
-def main():
-    source = Pairs("validation")
-    loader = grain.DataLoader(
-        data_source=source,
-        sampler=grain.samplers.IndexSampler(
-            len(source),
-            shuffle=True,
-            seed=0,
-            shard_options=grain.sharding.NoSharding(),
-            num_epochs=1,
-        ),
-        operations=[grain.transforms.Batch(batch_size=64, drop_remainder=True)],
-        worker_count=4,
-    )
-    for batch in loader:
-        print(batch["sar"].shape, batch["optical"].shape)  # (64, 128, 128, 3) each
-        break
-
-
-if __name__ == "__main__":
-    main()
-```
-
-On a 4-worker local run this gave roughly 1,000 pairs/s.
-'''
-
 _CITATION = """
 ## Citation
 
@@ -349,8 +281,8 @@ def body(stats: dict[str, Any], thresholds: dict[str, Any]) -> str:
             clean=stats["clean_share"],
             doi=_DOI,
         )
+        + _loading()
         + _CITATION
-        + _LOADING
     )
 
 
